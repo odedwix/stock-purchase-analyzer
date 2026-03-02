@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-agent AI stock **investment opportunity** analyzer. Uses Ollama (local qwen2.5:32b) to run 5 specialist AI agents + 1 sector analyst that debate and produce recommendations: should you BUY, WAIT, or AVOID? Evaluates stocks the user does NOT own — framed as opportunity scanning, not position management. Collects world news, Reddit, Twitter/X, stock news, Fear & Greed, and economic data.
+Multi-agent AI stock **investment opportunity** analyzer. Uses Anthropic Claude Haiku 4.5 (or Ollama local) to run 5 specialist AI agents + 1 sector analyst that debate and produce recommendations: should you BUY, WAIT, or AVOID? Evaluates stocks the user does NOT own — framed as opportunity scanning, not position management. Collects world news, Reddit, Twitter/X, stock news, Fear & Greed, economic indicators, and insider trading data.
 
 ## Commands
 
@@ -30,10 +30,9 @@ ruff format src/ tests/
 
 ### Data Flow
 ```
-User selects stock → DataAggregator (8 parallel collectors) → StockDataPackage
+User selects stock → DataAggregator (10 parallel collectors) → StockDataPackage
 → DebateEngine:
-  Phase 1: 5 agents analyze independently (sequential for rate limits)
-  Sector Analysis: SectorAnalystAgent maps world events to sectors/ETFs
+  Phase 1: 5 agents + sector analyst analyze in parallel (Anthropic/Ollama) or sequential (Groq/Gemini)
   Phase 2: debate rounds (skip if consensus, max 2 rounds)
   Phase 3: ModeratorAgent synthesis (entry/exit strategy, outlook, what-could-change)
 → Recommendation + SectorAnalysis
@@ -48,9 +47,9 @@ User selects stock → DataAggregator (8 parallel collectors) → StockDataPacka
 
 ### Key Layers
 
-- **`src/data_collectors/`** — Fetch stock data from external APIs. All inherit `BaseCollector` (Template Method pattern with TTL caching). `aggregator.py` runs 8 collectors in parallel via `asyncio.gather`: price, fundamentals, technical, news (finviz), reddit (8 subreddits), fear_greed, world_news (Google News RSS, 17 search terms), twitter (Nitter RSS, 19 accounts incl. POTUS, Fed, Goldman, Buffett).
+- **`src/data_collectors/`** — Fetch stock data from external APIs. All inherit `BaseCollector` (Template Method pattern with TTL caching). `aggregator.py` runs 10 collectors in parallel via `asyncio.gather`: price, fundamentals, technical, news (finviz), reddit (8 subreddits), fear_greed, world_news (Google News RSS, 17 search terms), twitter (Nitter RSS, 19 accounts incl. POTUS, Fed, Goldman, Buffett), economic (VIX, Treasury yields, S&P 500, Dollar Index via yfinance), insider (SEC EDGAR Form 4 filings).
 
-- **`src/agents/`** — Multi-agent debate system. 5 specialist agents inherit `BaseAgent`, each has a specialized prompt (`config/prompts/*.md`) framed as investment opportunity advisor. `SectorAnalystAgent` is separate (doesn't inherit BaseAgent). `debate_engine.py` orchestrates all phases. `llm_provider.py` abstracts Gemini/Groq/Ollama.
+- **`src/agents/`** — Multi-agent debate system. 5 specialist agents inherit `BaseAgent`, each has a specialized prompt (`config/prompts/*.md`) framed as investment opportunity advisor. `SectorAnalystAgent` is separate (doesn't inherit BaseAgent). `debate_engine.py` orchestrates all phases with parallel execution for Anthropic/Ollama. `llm_provider.py` abstracts Anthropic/Gemini/Groq/Ollama.
 
 - **`src/models/`** — Pydantic data models. `Position` enum uses BUY/WAIT/AVOID. `Recommendation` has ~25 fields including detailed entry/exit strategy (aggressive/conservative), dual stop-loss, multi-timeframe outlook, what-could-change, influential figures. `DebateTranscript` includes sector_analysis dict.
 
@@ -61,10 +60,10 @@ User selects stock → DataAggregator (8 parallel collectors) → StockDataPacka
 - **`config/settings.py`** — All configuration via Pydantic Settings / env vars. Single source of truth for API keys, model selection, cache TTLs, watchlist.
 
 ### LLM Provider Abstraction
-`src/agents/llm_provider.py` — `LLMProvider` ABC with `GeminiProvider`, `GroqProvider`, and `OllamaProvider`. Switch via `LLM_PROVIDER` env var. Current production: Ollama with qwen2.5:32b.
+`src/agents/llm_provider.py` — `LLMProvider` ABC with `AnthropicProvider`, `GeminiProvider`, `GroqProvider`, and `OllamaProvider`. Switch via `LLM_PROVIDER` env var. Current production: Anthropic with claude-haiku-4-5-20251001. Fallback: Ollama with qwen2.5:32b.
 
 ### Agent Debate Protocol
-- Phase 1: Each agent calls `analyze()` independently (sequential with delay for API, parallel-safe for Ollama)
+- Phase 1: Each agent calls `analyze()` independently (parallel for Anthropic/Ollama, sequential with delay for Groq/Gemini)
 - Sector: `SectorAnalystAgent.analyze()` maps world events to 12 sectors across 3 timeframes
 - Phase 2: Each agent calls `debate_respond()` seeing others' positions (1-2 rounds)
 - Phase 3: `ModeratorAgent.synthesize()` produces final `Recommendation` with entry/exit strategy, outlook, what-could-change
@@ -78,4 +77,4 @@ User selects stock → DataAggregator (8 parallel collectors) → StockDataPacka
 - `_parse_position()` — maps old HOLD/SELL to new WAIT/AVOID via `_POSITION_MAP`
 
 ## Environment Variables
-See `.env.example`. For Ollama (recommended): set `LLM_PROVIDER=ollama`, `OLLAMA_MODEL=qwen2.5:32b`. No API keys needed for core functionality.
+See `.env.example`. For Anthropic (recommended): set `LLM_PROVIDER=anthropic`, `ANTHROPIC_API_KEY=your_key`, `ANTHROPIC_MODEL=claude-haiku-4-5-20251001`. For Ollama (free, local): set `LLM_PROVIDER=ollama`, `OLLAMA_MODEL=qwen2.5:32b`.
