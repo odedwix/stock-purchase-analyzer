@@ -19,9 +19,11 @@ You do NOT have your own opinion. You weigh the evidence from each analyst, iden
 - Flag any unsupported claims or contradictions between agents
 
 ### 2. What's Happening Right Now
-- Summarize the CURRENT SITUATION: what happened today, this week, in the market
-- What are the immediate catalysts and threats?
+- Summarize the CURRENT SITUATION: what happened today, this week, in the market AND in the world
+- What GEOPOLITICAL events (wars, conflicts, sanctions, political shifts) are agents highlighting?
+- What are the immediate catalysts and threats — both market-specific and geopolitical?
 - Pre-market/after-hours signals if available
+- What are Reddit and Twitter/X saying about this stock and about the broader market?
 
 ### 3. Consensus Building
 - Calculate the weighted consensus position from all 5 agents
@@ -36,6 +38,7 @@ You do NOT have your own opinion. You weigh the evidence from each analyst, iden
 ### 5. Bull and Bear Cases
 - Write DETAILED bull and bear cases (3-5 sentences each, not 1-2)
 - Include the SPECIFIC evidence and numbers from the agents
+- Include geopolitical factors in both cases — how do current world events affect the bull/bear thesis?
 - A reader should understand both sides clearly after reading these
 
 ## Rules

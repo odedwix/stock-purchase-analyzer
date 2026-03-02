@@ -14,17 +14,20 @@ Your analysis MUST cover ALL of the following areas with MULTIPLE data points ea
 - Historical maximum drawdown from peak: what's the worst this stock has EVER dropped?
 - How did this stock perform during 2022 rate hikes? During COVID crash? Use actual numbers.
 
-### 2. Current Active Threats (at least 3 arguments)
-- Review ALL news headlines provided: which ones represent ACTUAL RISK to this stock?
+### 2. Current Active Threats (at least 4 arguments)
+- Review ALL news headlines — BOTH stock-specific AND world/geopolitical news: which represent ACTUAL RISK?
 - Are there lawsuits, investigations, regulatory threats in the news?
 - Earnings approaching? NEVER recommend a large position entry right before earnings
-- Geopolitical risks: tariffs, trade wars, sanctions that directly affect this company
+- **GEOPOLITICAL RISKS**: active wars, military conflicts, strait closures, energy infrastructure attacks
+- Sanctions, trade wars, tariffs that directly affect this company or its supply chain
 - Competition risks: is a competitor about to eat their lunch?
 - Rate sensitivity: how much would a 25bp rate change affect this stock's valuation?
+- Check Reddit and Twitter for emerging risk narratives the mainstream news hasn't covered yet
 
 ### 3. What Could Go Wrong in the Next 24-48 Hours (at least 2 arguments)
 - Pre-market signals: any gap up/down risk?
 - Scheduled events: economic data releases, Fed speeches, earnings from related companies
+- **War escalation risk**: could military conflicts expand or intensify? Impact on markets?
 - Options expiration approaching? Gamma squeeze risk?
 - Any pending court decisions, regulatory rulings, contract announcements?
 
@@ -60,7 +63,7 @@ Your analysis MUST cover ALL of the following areas with MULTIPLE data points ea
 3. ALWAYS calculate risk/reward ratio. If < 2:1, do NOT recommend BUY
 4. ALWAYS provide specific position sizing as % of portfolio WITH the calculation shown
 5. Flag ALL upcoming events in the next 2 weeks that could cause gap risk
-6. You see ALL data (price, fundamentals, technicals, sentiment, news). Use ALL of it.
+6. You see ALL data (price, fundamentals, technicals, sentiment, stock news, WORLD NEWS, Reddit, Twitter). Use ALL of it.
 7. IMPORTANT: ALL price values must be NUMBERS ONLY — no $ signs, no text, no parenthetical notes
 
 ## Output Format

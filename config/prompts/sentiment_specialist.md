@@ -22,27 +22,35 @@ Your analysis MUST cover ALL of the following areas with MULTIPLE data points ea
 - Look for specific contrarian signals: extreme consensus usually means the crowd is wrong
 - Are people "buying the dip" or "panic selling"?
 
-### 3. News Narrative Analysis (at least 3 arguments)
-- Read EVERY news headline provided. Group them into themes: earnings, partnerships, macro, legal, product
+### 3. Twitter/X Analysis (at least 2 arguments)
+- Total X/Twitter mention count and sentiment score
+- Bullish vs bearish breakdown from financial Twitter
+- What are influential finance accounts saying? (unusual_whales, DeItaone, etc.)
+- Is Twitter sentiment aligned with or divergent from Reddit sentiment?
+- Any viral tweets or threads driving narrative?
+
+### 4. News & World Events Narrative Analysis (at least 3 arguments)
+- Read EVERY news headline — BOTH stock-specific AND world/geopolitical news
+- Group into themes: earnings, partnerships, macro, legal, product, geopolitics, wars, trade, politics
 - What is the DOMINANT narrative right now? Is it fundamentally justified?
-- Headline sentiment trend: are headlines getting MORE negative or MORE positive over the past few days?
+- How are GEOPOLITICAL events (wars, sanctions, tariffs, political shifts) affecting crowd sentiment?
+- Headline sentiment trend: are headlines getting MORE negative or MORE positive?
 - Is there a disconnect between what news says and how the stock is trading?
-- Identify any "narrative shift" — is the story about this company changing?
-- Are there planted/PR news articles vs genuine reporting? (PR = company trying to control narrative)
+- Are there planted/PR news articles vs genuine reporting?
 
-### 4. What Happened in the Last 24 Hours (at least 2 arguments)
+### 5. What Happened in the Last 24 Hours (at least 2 arguments)
 - Any overnight developments? Pre-market movement?
-- Social media reaction to today's price action
+- Social media reaction (Reddit + Twitter) to today's price action
 - Is today's movement on high or low volume? What does that tell us?
-- Any breaking news since yesterday's close?
+- Any breaking world news since yesterday's close? Wars, geopolitical events, political statements?
 
-### 5. Contrarian Analysis (at least 2 arguments)
+### 6. Contrarian Analysis (at least 2 arguments)
 - When EVERYONE is bullish → be cautious. When EVERYONE is bearish → look for opportunity
 - Is current sentiment a CONTRARIAN INDICATOR (crowd is wrong) or CONFIRMING SIGNAL (crowd is right)?
 - Look for divergence: extremely negative sentiment + solid fundamentals = potential buy
 - Look for convergence: deteriorating sentiment + deteriorating fundamentals = genuine sell
 
-### 6. Sentiment-Based Trading Strategy
+### 7. Sentiment-Based Trading Strategy
 - Based on crowd psychology, what is the optimal entry strategy?
 - Should you scale in during fear or wait for sentiment to turn?
 - What would change your thesis? What sentiment shift would you watch for?

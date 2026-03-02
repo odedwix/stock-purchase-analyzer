@@ -171,6 +171,200 @@ if selected_stock:
             agreement_pct = rec.agent_agreement_level * 100
             st.progress(rec.agent_agreement_level, text=f"Agent Agreement: {agreement_pct:.0f}%")
 
+            st.markdown("---")
+
+            # ============================================================
+            # SECTOR IMPACT ANALYSIS
+            # ============================================================
+            sector_analysis = transcript.sector_analysis
+            if sector_analysis and not sector_analysis.get("error"):
+                st.header("🌍 Sector Impact Analysis")
+
+                # Major events
+                major_events = sector_analysis.get("major_events", [])
+                if major_events:
+                    st.subheader("Major World Events")
+                    for event in major_events:
+                        severity_emoji = {
+                            "critical": "🔴",
+                            "high": "🟠",
+                            "medium": "🟡",
+                            "low": "🟢",
+                        }.get(event.get("severity", ""), "⚪")
+                        trajectory = event.get("trajectory", "")
+                        traj_arrow = {"escalating": "↗️", "stable": "➡️", "de_escalating": "↘️"}.get(trajectory, "")
+                        st.markdown(
+                            f"- {severity_emoji} **{event.get('event', 'Unknown')}** "
+                            f"— Severity: {event.get('severity', 'N/A')} {traj_arrow}"
+                        )
+
+                # Sector impacts
+                sector_impacts = sector_analysis.get("sector_impacts", [])
+                if sector_impacts:
+                    st.subheader("Sector Impact Matrix")
+                    for sector in sector_impacts:
+                        direction = sector.get("impact_direction", "neutral")
+                        dir_emoji = {"positive": "📈", "negative": "📉", "neutral": "➡️"}.get(direction, "")
+                        magnitude = sector.get("impact_magnitude", "")
+
+                        with st.expander(f"{dir_emoji} **{sector.get('sector', 'Unknown')}** — {direction.upper()} ({magnitude})"):
+                            col_imm, col_near, col_med = st.columns(3)
+                            with col_imm:
+                                st.markdown("**Immediate (0-2 wks)**")
+                                st.write(sector.get("immediate_outlook", "N/A"))
+                            with col_near:
+                                st.markdown("**Near-Term (2-8 wks)**")
+                                st.write(sector.get("near_term_outlook", "N/A"))
+                            with col_med:
+                                st.markdown("**Medium-Term (2-6 mo)**")
+                                st.write(sector.get("medium_term_outlook", "N/A"))
+
+                            etfs = sector.get("recommended_etfs", [])
+                            stocks = sector.get("recommended_stocks", [])
+                            avoid = sector.get("avoid", [])
+                            if etfs:
+                                st.markdown(f"**ETFs:** {', '.join(etfs)}")
+                            if stocks:
+                                st.markdown(f"**Stocks:** {', '.join(stocks)}")
+                            if avoid:
+                                st.markdown(f"**Avoid:** {', '.join(avoid)}")
+
+                # Action recommendations by timeframe
+                col_act1, col_act2, col_act3 = st.columns(3)
+                with col_act1:
+                    st.subheader("⚡ Immediate Actions")
+                    for action in sector_analysis.get("immediate_actions", []):
+                        st.markdown(f"- {action}")
+                with col_act2:
+                    st.subheader("📅 Near-Term Actions")
+                    for action in sector_analysis.get("near_term_actions", []):
+                        st.markdown(f"- {action}")
+                with col_act3:
+                    st.subheader("📆 Medium-Term Actions")
+                    for action in sector_analysis.get("medium_term_actions", []):
+                        st.markdown(f"- {action}")
+
+                # Top picks
+                top_picks = sector_analysis.get("top_picks", [])
+                if top_picks:
+                    st.subheader("🏆 Top Picks")
+                    pick_cols = st.columns(min(len(top_picks), 4))
+                    for i, pick in enumerate(top_picks[:4]):
+                        with pick_cols[i]:
+                            risk_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(pick.get("risk_level", ""), "⚪")
+                            st.metric(
+                                pick.get("ticker", "?"),
+                                f"+{pick.get('expected_return_pct', 0):.0f}%",
+                            )
+                            st.caption(f"{risk_emoji} {pick.get('timeframe', '')} | {pick.get('rationale', '')[:80]}")
+
+                # Sectors to avoid
+                avoid_sectors = sector_analysis.get("sectors_to_avoid", [])
+                if avoid_sectors:
+                    st.warning(f"⚠️ **Sectors to Avoid:** {', '.join(avoid_sectors)}")
+
+                # Key risks
+                key_risks = sector_analysis.get("key_risks", [])
+                if key_risks:
+                    with st.expander("🛡️ Key Risks to This Thesis"):
+                        for risk in key_risks:
+                            st.markdown(f"- {risk}")
+
+                st.markdown("---")
+
+            # ============================================================
+            # SOCIAL MEDIA SENTIMENT (Reddit + Twitter)
+            # ============================================================
+            st.header("📱 Social Media & News Sentiment")
+
+            # Get sentiment data from the data package stored in the analysis
+            # We need to pull it from agent analyses since the data package isn't directly stored
+            # Instead, show sentiment summary from agent analysis
+            col_reddit, col_twitter = st.columns(2)
+
+            with col_reddit:
+                st.subheader("🤖 Reddit Summary")
+                # Find Sentiment Specialist's analysis
+                sentiment_agent = None
+                for analysis in transcript.phase1_analyses:
+                    if analysis.agent_name == "Sentiment Specialist":
+                        sentiment_agent = analysis
+                        break
+
+                if sentiment_agent:
+                    # Show sentiment-related arguments
+                    reddit_args = [
+                        a for a in sentiment_agent.key_arguments
+                        if any(kw in a.claim.lower() for kw in ["reddit", "social", "crowd", "wsb", "r/"])
+                    ]
+                    if reddit_args:
+                        for arg in reddit_args:
+                            st.markdown(f"**{arg.claim}**")
+                            st.caption(arg.evidence)
+                    else:
+                        # Show first few arguments as general sentiment
+                        for arg in sentiment_agent.key_arguments[:3]:
+                            st.markdown(f"**{arg.claim}**")
+                            st.caption(arg.evidence)
+                else:
+                    st.write("No Reddit data available")
+
+            with col_twitter:
+                st.subheader("🐦 Twitter/X Summary")
+                if sentiment_agent:
+                    twitter_args = [
+                        a for a in sentiment_agent.key_arguments
+                        if any(kw in a.claim.lower() for kw in ["twitter", "x.com", "tweet", "social media"])
+                    ]
+                    if twitter_args:
+                        for arg in twitter_args:
+                            st.markdown(f"**{arg.claim}**")
+                            st.caption(arg.evidence)
+                    else:
+                        # Show remaining sentiment arguments
+                        shown = set()
+                        for arg in sentiment_agent.key_arguments:
+                            if arg.claim not in shown and len(shown) < 3:
+                                if not any(kw in arg.claim.lower() for kw in ["reddit", "wsb", "r/"]):
+                                    st.markdown(f"**{arg.claim}**")
+                                    st.caption(arg.evidence)
+                                    shown.add(arg.claim)
+                else:
+                    st.write("No Twitter data available")
+
+            # World News Summary (from Macro Economist)
+            st.subheader("🌍 World News & Geopolitical Impact")
+            macro_agent = None
+            for analysis in transcript.phase1_analyses:
+                if analysis.agent_name == "Macro Economist":
+                    macro_agent = analysis
+                    break
+
+            if macro_agent:
+                # Show geopolitical arguments
+                geo_args = [
+                    a for a in macro_agent.key_arguments
+                    if any(kw in a.claim.lower() for kw in [
+                        "geopolit", "war", "conflict", "sanction", "tariff", "trade",
+                        "iran", "china", "russia", "military", "oil", "energy",
+                        "hormuz", "strait", "political", "trump", "election",
+                    ])
+                ]
+                if geo_args:
+                    for arg in geo_args:
+                        strength_emoji = {"strong": "🔴", "moderate": "🟡", "weak": "🟢"}.get(arg.strength, "")
+                        st.markdown(f"- {strength_emoji} **{arg.claim}**")
+                        st.caption(f"  {arg.evidence}")
+                else:
+                    # Show all macro arguments
+                    for arg in macro_agent.key_arguments[:5]:
+                        st.markdown(f"- **{arg.claim}**")
+                        st.caption(f"  {arg.evidence}")
+            else:
+                st.write("No macro/geopolitical analysis available")
+
+            st.markdown("---")
+
             # Debate transcript (expandable)
             with st.expander("📜 View Full Debate Transcript"):
                 for analysis in transcript.phase1_analyses:
@@ -198,6 +392,11 @@ if selected_stock:
                             st.markdown(f"**Concessions:** {'; '.join(resp.concessions)}")
                         st.markdown("---")
 
+            # Sector analysis raw reasoning (expandable)
+            if sector_analysis and sector_analysis.get("raw_reasoning"):
+                with st.expander("📊 View Sector Analyst Full Reasoning"):
+                    st.write(sector_analysis["raw_reasoning"])
+
             # Metadata
             st.caption(
                 f"Analysis completed in {rec.analysis_duration_seconds:.1f}s | "
@@ -214,7 +413,7 @@ if selected_stock:
                 "Get a free key at https://aistudio.google.com"
             )
         else:
-            with st.spinner(f"🔍 Analyzing {selected_stock}... This may take 30-60 seconds."):
+            with st.spinner(f"🔍 Analyzing {selected_stock}... This may take 1-2 minutes with local LLM."):
                 try:
                     from src.services.analysis_service import AnalysisService
 

@@ -114,4 +114,5 @@ class DebateTranscript(BaseModel):
     phase2_rounds: list[list[DebateResponse]] = Field(default_factory=list)
     moderator_synthesis: str = ""
     recommendation: Recommendation | None = None
+    sector_analysis: dict = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.now)

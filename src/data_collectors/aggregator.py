@@ -8,6 +8,8 @@ from src.data_collectors.news_collector import NewsCollector
 from src.data_collectors.price_collector import PriceCollector
 from src.data_collectors.reddit_collector import RedditCollector
 from src.data_collectors.technical import TechnicalCollector
+from src.data_collectors.twitter_collector import TwitterCollector
+from src.data_collectors.world_news_collector import WorldNewsCollector
 from src.models.stock_data import SentimentData, StockDataPackage
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,8 @@ class DataAggregator:
         self.news_collector = NewsCollector()
         self.reddit_collector = RedditCollector()
         self.fear_greed_collector = FearGreedCollector()
+        self.world_news_collector = WorldNewsCollector()
+        self.twitter_collector = TwitterCollector()
 
     async def collect_all(self, symbol: str) -> StockDataPackage:
         """Collect all available data for a symbol."""
@@ -36,10 +40,15 @@ class DataAggregator:
             self.news_collector.collect(symbol),          # 3
             self.reddit_collector.collect(symbol),        # 4
             self.fear_greed_collector.collect(symbol),    # 5
+            self.world_news_collector.collect(symbol),    # 6
+            self.twitter_collector.collect(symbol),       # 7
             return_exceptions=True,
         )
 
-        collector_names = ["price", "fundamentals", "technical", "news", "reddit", "fear_greed"]
+        collector_names = [
+            "price", "fundamentals", "technical", "news",
+            "reddit", "fear_greed", "world_news", "twitter",
+        ]
 
         # Extract results, log errors
         extracted = []
@@ -57,6 +66,8 @@ class DataAggregator:
         news_items = extracted[3] or []
         reddit_data = extracted[4] or {}
         fear_greed = extracted[5] or (None, None)
+        world_news_items = extracted[6] or []
+        twitter_data = extracted[7] or {}
 
         # Assemble sentiment data from multiple sources
         fg_score, fg_label = (None, None)
@@ -74,6 +85,12 @@ class DataAggregator:
             reddit_subreddit_breakdown=reddit_data.get("subreddit_breakdown", {}) if reddit_data else {},
             reddit_top_posts=reddit_data.get("top_posts", []) if reddit_data else [],
             news_items=news_items,
+            world_news_items=world_news_items,
+            twitter_sentiment=twitter_data.get("sentiment_score", 0) if twitter_data else 0,
+            twitter_mention_count=twitter_data.get("mention_count", 0) if twitter_data else 0,
+            twitter_bullish_count=twitter_data.get("sentiment_summary", {}).get("bullish", 0) if twitter_data else 0,
+            twitter_bearish_count=twitter_data.get("sentiment_summary", {}).get("bearish", 0) if twitter_data else 0,
+            twitter_top_posts=twitter_data.get("posts", [])[:20] if twitter_data else [],
         )
 
         logger.info(
@@ -82,7 +99,9 @@ class DataAggregator:
             f"fundamentals={'OK' if fundamentals else 'FAIL'}, "
             f"technical={'OK' if technical else 'FAIL'}, "
             f"news={len(news_items)} articles, "
+            f"world_news={len(world_news_items)} articles, "
             f"reddit={reddit_data.get('mention_count', 0) if reddit_data else 0} mentions, "
+            f"twitter={twitter_data.get('mention_count', 0) if twitter_data else 0} mentions, "
             f"fear_greed={fg_score}"
         )
 

@@ -98,10 +98,18 @@ class StockAnalystAgent(BaseAgent):
                 parts.append(f"  Number of Analysts: {f.num_analyst_opinions}")
             parts.append("")
 
-        # News — stock analyst needs to understand how news affects fundamentals
+        # Stock-specific news
         if data.sentiment and data.sentiment.news_items:
-            parts.append(f"RECENT NEWS ({len(data.sentiment.news_items)} articles):")
+            parts.append(f"STOCK NEWS ({len(data.sentiment.news_items)} articles):")
             for item in data.sentiment.news_items[:25]:
+                date_str = f" ({item.published_at})" if item.published_at else ""
+                parts.append(f"  - [{item.source}]{date_str} {item.title}")
+            parts.append("")
+
+        # World news — stock analyst needs geopolitical context affecting fundamentals
+        if data.sentiment and data.sentiment.world_news_items:
+            parts.append(f"WORLD & GEOPOLITICAL NEWS ({len(data.sentiment.world_news_items)} articles — consider impact on company fundamentals):")
+            for item in data.sentiment.world_news_items[:20]:
                 date_str = f" ({item.published_at})" if item.published_at else ""
                 parts.append(f"  - [{item.source}]{date_str} {item.title}")
             parts.append("")

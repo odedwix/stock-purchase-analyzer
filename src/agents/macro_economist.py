@@ -79,12 +79,30 @@ class MacroEconomistAgent(BaseAgent):
         if data.sentiment and data.sentiment.fear_greed_index is not None:
             parts.append(f"MARKET MOOD: Fear & Greed Index = {data.sentiment.fear_greed_index}/100 ({data.sentiment.fear_greed_label})\n")
 
-        # ALL news — critical for macro/geopolitical context
+        # WORLD NEWS — THE MOST CRITICAL DATA for macro/geopolitical analysis
+        if data.sentiment and data.sentiment.world_news_items:
+            parts.append(f"WORLD & GEOPOLITICAL NEWS ({len(data.sentiment.world_news_items)} articles — THIS IS YOUR PRIMARY DATA, analyze ALL):")
+            for item in data.sentiment.world_news_items[:40]:
+                date_str = f" ({item.published_at})" if item.published_at else ""
+                source_str = f"[{item.source}]" if item.source else ""
+                parts.append(f"  - {source_str}{date_str} {item.title}")
+            parts.append("")
+
+        # Stock-specific financial news
         if data.sentiment and data.sentiment.news_items:
-            parts.append(f"RECENT NEWS & EVENTS ({len(data.sentiment.news_items)} articles — analyze ALL for macro significance):")
-            for item in data.sentiment.news_items[:30]:
+            parts.append(f"STOCK-SPECIFIC NEWS ({len(data.sentiment.news_items)} articles — analyze for macro relevance):")
+            for item in data.sentiment.news_items[:20]:
                 date_str = f" ({item.published_at})" if item.published_at else ""
                 parts.append(f"  - [{item.source}]{date_str} {item.title}")
+            parts.append("")
+
+        # Twitter — valuable for real-time macro sentiment
+        if data.sentiment and data.sentiment.twitter_mention_count > 0:
+            s = data.sentiment
+            parts.append(f"TWITTER/X MACRO CHATTER ({s.twitter_mention_count} mentions, sentiment: {s.twitter_sentiment:+.3f}):")
+            if s.twitter_top_posts:
+                for post in s.twitter_top_posts[:10]:
+                    parts.append(f"  - {post[:200]}")
             parts.append("")
 
         return "\n".join(parts)

@@ -73,15 +73,40 @@ class SentimentSpecialistAgent(BaseAgent):
             else:
                 parts.append("REDDIT: No significant mentions found this week\n")
 
-            # News — with all articles for deep analysis
+            # Twitter / X — detailed breakdown
+            if s.twitter_mention_count > 0:
+                parts.append(f"TWITTER/X ACTIVITY ({s.twitter_mention_count} mentions):")
+                parts.append(f"  Overall Sentiment Score: {s.twitter_sentiment:+.3f} (-1=very bearish, +1=very bullish)")
+                if s.twitter_bullish_count or s.twitter_bearish_count:
+                    total = s.twitter_bullish_count + s.twitter_bearish_count
+                    bull_pct = (s.twitter_bullish_count / total * 100) if total > 0 else 0
+                    parts.append(f"  Bullish Posts: {s.twitter_bullish_count} ({bull_pct:.0f}%)")
+                    parts.append(f"  Bearish Posts: {s.twitter_bearish_count} ({100 - bull_pct:.0f}%)")
+                if s.twitter_top_posts:
+                    parts.append("  TOP TWEETS (analyze each for sentiment):")
+                    for post in s.twitter_top_posts[:15]:
+                        parts.append(f"    - {post[:200]}")
+                parts.append("")
+            else:
+                parts.append("TWITTER/X: No significant mentions found\n")
+
+            # Stock-specific news
             if s.news_items:
-                parts.append(f"RECENT NEWS ({len(s.news_items)} articles — analyze EACH headline):")
+                parts.append(f"STOCK NEWS ({len(s.news_items)} articles — analyze EACH headline):")
                 for item in s.news_items[:30]:
                     date_str = f" ({item.published_at})" if item.published_at else ""
                     parts.append(f"  - [{item.source}]{date_str} {item.title}")
                 parts.append("")
             else:
-                parts.append("NEWS: No recent articles found\n")
+                parts.append("STOCK NEWS: No recent articles found\n")
+
+            # World / geopolitical news — critical for understanding broader sentiment
+            if s.world_news_items:
+                parts.append(f"WORLD & GEOPOLITICAL NEWS ({len(s.world_news_items)} articles — analyze for market impact):")
+                for item in s.world_news_items[:30]:
+                    date_str = f" ({item.published_at})" if item.published_at else ""
+                    parts.append(f"  - [{item.source}]{date_str} {item.title}")
+                parts.append("")
 
         else:
             parts.append("SENTIMENT DATA: Not available\n")

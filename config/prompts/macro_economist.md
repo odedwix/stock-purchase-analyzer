@@ -15,13 +15,17 @@ Your analysis MUST cover ALL of the following areas with MULTIPLE data points ea
 - Bond yields vs equity risk premium: are stocks STILL attractive compared to risk-free bonds?
 - Impact on this company specifically: how does their debt cost change? How do their customers respond?
 
-### 2. Geopolitical Risk Assessment (at least 2 arguments)
-- Active conflicts and their SPECIFIC impact on this company's supply chain, revenue, or costs
+### 2. Geopolitical Risk Assessment (at least 4 arguments — THIS IS YOUR PRIMARY EXPERTISE)
+- **READ EVERY WORLD NEWS HEADLINE** — the WORLD & GEOPOLITICAL NEWS section is your most important data source
+- Active wars and military conflicts: which countries, what is the scope, how does it affect global markets?
+- Strait/waterway closures (Hormuz, Suez, Taiwan Strait): impact on shipping, oil, supply chains
+- Attacks on energy infrastructure (oil facilities, pipelines, refineries): immediate and sustained price impact
 - Trade tensions: tariffs, export controls, sanctions — especially for tech, semis, energy
 - US-China relations: does this company have significant China exposure?
 - Regulatory landscape: are regulators targeting this sector? (antitrust, data privacy, AI regulation)
-- Election/political cycle: any policy changes that could affect this stock?
-- Specific recent geopolitical events from the news headlines and their impact
+- Election/political cycle: domestic and international political opinions and policy changes
+- Public opinion on leaders (Trump, EU leaders, etc.): how does political sentiment affect markets?
+- For EVERY geopolitical event: which sectors get hit hardest? Which benefit? What is the timeline for recovery?
 
 ### 3. Economic Cycle Position (at least 2 arguments)
 - Where are we in the cycle: early expansion, mid-cycle, late cycle, or recession?
@@ -31,12 +35,14 @@ Your analysis MUST cover ALL of the following areas with MULTIPLE data points ea
 - Labor market: unemployment trends, wage growth, hiring/layoffs in this sector
 
 ### 4. What's Happening RIGHT NOW (at least 3 arguments)
-- Review ALL news headlines: which ones have MACRO significance?
-- Last 24 hours: any economic data releases, Fed speeches, or geopolitical events?
-- This week: what macro events are moving markets?
+- Review ALL news headlines — WORLD NEWS is your primary source: which ones have MACRO significance?
+- Active military operations, casualties, escalation signals from the world news
+- Last 24 hours: any economic data releases, Fed speeches, geopolitical events, military actions?
+- This week: what macro events are moving markets? Any wars escalating or de-escalating?
 - Is the market in risk-on or risk-off mode? How does that affect this stock?
 - Pre-market/after-hours: any overnight macro developments?
 - What economic data is being released in the next 1-2 weeks that could move this stock?
+- Check Twitter/X chatter for real-time macro sentiment from finance professionals
 
 ### 5. Inflation & Cost Pressures (at least 1 argument)
 - How does current inflation affect this company's INPUT costs?

@@ -131,6 +131,17 @@ class SentimentData(BaseModel):
     reddit_subreddit_breakdown: dict[str, int] = Field(default_factory=dict)
     news_items: list[NewsItem] = Field(default_factory=list)
     reddit_top_posts: list[str] = Field(default_factory=list)
+
+    # World / geopolitical news (Google News RSS)
+    world_news_items: list[NewsItem] = Field(default_factory=list)
+
+    # Twitter / X sentiment
+    twitter_sentiment: float | None = None  # -1.0 to 1.0
+    twitter_mention_count: int = 0
+    twitter_bullish_count: int = 0
+    twitter_bearish_count: int = 0
+    twitter_top_posts: list[str] = Field(default_factory=list)
+
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
@@ -269,9 +280,18 @@ class StockDataPackage(BaseModel):
                 if s.reddit_subreddit_breakdown:
                     breakdown = ", ".join(f"r/{sub}: {cnt}" for sub, cnt in s.reddit_subreddit_breakdown.items())
                     parts.append(f"  Subreddit Breakdown: {breakdown}")
+            if s.twitter_mention_count > 0:
+                parts.append(f"  Twitter/X Mentions: {s.twitter_mention_count}")
+                parts.append(f"  Twitter Sentiment: {s.twitter_sentiment:+.2f}")
+                if s.twitter_bullish_count or s.twitter_bearish_count:
+                    parts.append(f"  Twitter Bullish/Bearish: {s.twitter_bullish_count}/{s.twitter_bearish_count}")
             if s.news_items:
-                parts.append(f"  Recent News ({len(s.news_items)} articles):")
+                parts.append(f"  Stock News ({len(s.news_items)} articles):")
                 for item in s.news_items[:5]:
+                    parts.append(f"    - {item.title} ({item.source})")
+            if s.world_news_items:
+                parts.append(f"  World News ({len(s.world_news_items)} articles):")
+                for item in s.world_news_items[:5]:
                     parts.append(f"    - {item.title} ({item.source})")
             parts.append("")
 

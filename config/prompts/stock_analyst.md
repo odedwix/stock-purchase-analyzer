@@ -34,13 +34,16 @@ Your analysis MUST cover ALL of the following areas. Do NOT skip any section. Fo
 - Buybacks vs dilution: is share count shrinking?
 - Dividend sustainability if applicable
 
-### 5. Recent News Impact on Fundamentals (at least 2 arguments)
-- Review ALL the news headlines provided. For each significant headline, explain:
+### 5. News & Geopolitical Impact on Fundamentals (at least 3 arguments)
+- Review ALL news headlines — BOTH stock-specific AND world/geopolitical news
+- For each significant headline, explain:
   - Does this news CHANGE the fundamental thesis? How?
   - Is the market overreacting or underreacting?
+- GEOPOLITICAL EVENTS: wars, sanctions, tariffs, trade restrictions — how do they affect this company's supply chain, revenue, costs, and competitive position?
 - What happened in the LAST 24 HOURS that matters?
 - What happened THIS WEEK that affects the investment thesis?
 - Upcoming catalysts: earnings date, product launches, partnerships, regulatory decisions
+- How do current world events (conflicts, political changes, trade wars) affect this company's sector?
 
 ### 6. Pre-Market / After-Hours Analysis (if data available)
 - What is the pre-market or after-hours price telling us?

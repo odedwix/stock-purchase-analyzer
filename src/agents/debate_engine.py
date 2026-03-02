@@ -6,6 +6,7 @@ from src.agents.base_agent import BaseAgent
 from src.agents.macro_economist import MacroEconomistAgent
 from src.agents.moderator import ModeratorAgent
 from src.agents.risk_manager import RiskManagerAgent
+from src.agents.sector_analyst import SectorAnalystAgent
 from src.agents.sentiment_specialist import SentimentSpecialistAgent
 from src.agents.stock_analyst import StockAnalystAgent
 from src.agents.technical_analyst import TechnicalAnalystAgent
@@ -34,6 +35,7 @@ class DebateEngine:
             TechnicalAnalystAgent(),
         ]
         self.moderator = ModeratorAgent()
+        self.sector_analyst = SectorAnalystAgent()
 
     async def run_debate(self, data: StockDataPackage) -> DebateTranscript:
         """Run a full analysis debate for a stock."""
@@ -46,6 +48,18 @@ class DebateEngine:
         # Phase 1: Independent analysis (sequential to respect Groq rate limits)
         logger.info(f"Phase 1: Independent analysis ({len(self.agents)} agents)")
         phase1_results = await self._phase1_analyze(data, budget)
+
+        # Sector Impact Analysis (runs after Phase 1, uses same data)
+        logger.info("Running sector impact analysis...")
+        sector_analysis = {}
+        try:
+            delay = _get_agent_delay()
+            if delay > 0:
+                await asyncio.sleep(delay)
+            sector_analysis = await self.sector_analyst.analyze(data, budget)
+            logger.info("Sector analysis complete")
+        except Exception as e:
+            logger.warning(f"Sector analysis failed (non-fatal): {e}")
 
         # Phase 2: Debate rounds
         phase2_rounds = []
@@ -86,6 +100,7 @@ class DebateEngine:
             phase2_rounds=phase2_rounds,
             moderator_synthesis=recommendation.bull_case + " | " + recommendation.bear_case,
             recommendation=recommendation,
+            sector_analysis=sector_analysis,
         )
 
     async def _phase1_analyze(
