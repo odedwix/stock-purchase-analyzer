@@ -10,7 +10,10 @@ from src.data_collectors.base import BaseCollector
 logger = logging.getLogger(__name__)
 
 # Subreddits to monitor for stock sentiment
-SUBREDDITS = ["stocks", "investing", "wallstreetbets", "StockMarket"]
+SUBREDDITS = [
+    "stocks", "investing", "wallstreetbets", "StockMarket",
+    "options", "dividends", "ValueInvesting", "SecurityAnalysis",
+]
 
 
 class RedditCollector(BaseCollector):

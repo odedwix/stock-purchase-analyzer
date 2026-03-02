@@ -20,12 +20,31 @@ NITTER_INSTANCES = [
 
 # Influential finance / stock Twitter accounts to check
 FINANCE_ACCOUNTS = [
+    # Breaking news & unusual activity
     "unusual_whales",
     "DeItaone",
     "zaborsky_",
+    # Financial commentators
     "jimcramer",
     "carlaborsa1",
     "elikimon",
+    # Influential traders & analysts
+    "WallStJesus",
+    "GRDecter",
+    "MarketRebels",
+    "OptionsAction",
+    "SquawkCNBC",
+    # Government & Fed
+    "POTUS",
+    "SecYellen",
+    "federalreserve",
+    # Major investors & fund managers
+    "WarrenBuffett",
+    "CathieDWood",
+    # Major brokerages
+    "GoldmanSachs",
+    "JPMorgan",
+    "MorganStanley",
 ]
 
 # Google search fallback user agent

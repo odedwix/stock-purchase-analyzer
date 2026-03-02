@@ -37,6 +37,14 @@ SEARCH_TERMS = [
     "oil prices",
     "trade war",
     "sanctions",
+    "investment opportunity",
+    "market crash buying",
+    "oversold stocks",
+    "sector rotation",
+    "Warren Buffett",
+    "Fed chair",
+    "Goldman Sachs outlook",
+    "institutional investors",
 ]
 
 # Polite delay between RSS requests to avoid being blocked

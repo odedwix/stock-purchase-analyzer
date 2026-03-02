@@ -8,9 +8,9 @@ from pydantic import BaseModel, Field
 class Position(str, Enum):
     STRONG_BUY = "STRONG_BUY"
     BUY = "BUY"
-    HOLD = "HOLD"
-    SELL = "SELL"
-    STRONG_SELL = "STRONG_SELL"
+    WAIT = "WAIT"  # Not yet — wait for better entry
+    AVOID = "AVOID"  # Don't buy now — poor risk/reward
+    STRONG_AVOID = "STRONG_AVOID"  # Stay away entirely
 
 
 class Argument(BaseModel):
@@ -75,10 +75,26 @@ class Recommendation(BaseModel):
     position: Position
     confidence: int = Field(ge=0, le=100)
 
-    # Price targets
+    # Price targets (legacy — kept for backwards compat)
     entry_price: float | None = None
     exit_price: float | None = None
     stop_loss: float | None = None
+
+    # Detailed entry strategy
+    entry_price_aggressive: float | None = None
+    entry_price_conservative: float | None = None
+    scaling_plan: str = ""
+
+    # Detailed exit strategy
+    exit_price_partial: float | None = None
+    exit_price_full: float | None = None
+
+    # Dual stop-loss
+    stop_loss_tight: float | None = None
+    stop_loss_wide: float | None = None
+
+    # Position sizing
+    position_size_pct: float | None = None
 
     # Risk/reward
     risk_reward_ratio: float | None = None
@@ -90,6 +106,18 @@ class Recommendation(BaseModel):
     bear_case: str = ""
     time_horizon: str = ""
     key_factors: list[str] = Field(default_factory=list)
+
+    # Multi-timeframe outlook
+    outlook_6_months: str = ""
+    outlook_1_year: str = ""
+    outlook_long_term: str = ""
+
+    # What could change
+    what_could_change: list[str] = Field(default_factory=list)
+    contradictory_signals: list[str] = Field(default_factory=list)
+
+    # Influential figures
+    influential_figures_summary: str = ""
 
     # Agreement
     agent_agreement_level: float = Field(

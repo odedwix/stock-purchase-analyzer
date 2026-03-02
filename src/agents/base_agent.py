@@ -11,6 +11,24 @@ from src.models.stock_data import StockDataPackage
 
 logger = logging.getLogger(__name__)
 
+# Map old position values (HOLD/SELL) to new enum values
+_POSITION_MAP = {
+    "STRONG_BUY": "STRONG_BUY",
+    "BUY": "BUY",
+    "HOLD": "WAIT",
+    "WAIT": "WAIT",
+    "SELL": "AVOID",
+    "AVOID": "AVOID",
+    "STRONG_SELL": "STRONG_AVOID",
+    "STRONG_AVOID": "STRONG_AVOID",
+}
+
+
+def _parse_position(raw: str) -> Position:
+    """Parse position string, mapping old HOLD/SELL values to new WAIT/AVOID."""
+    mapped = _POSITION_MAP.get(raw.upper().strip(), "WAIT")
+    return Position(mapped)
+
 
 def _extract_json(text: str) -> dict:
     """Extract JSON from LLM response, handling markdown code blocks and common errors."""
@@ -119,7 +137,7 @@ class BaseAgent:
             parsed = _extract_json(response_text)
             return AgentAnalysis(
                 agent_name=self.name,
-                position=Position(parsed.get("position", "HOLD")),
+                position=_parse_position(parsed.get("position", "WAIT")),
                 confidence=parsed.get("confidence", 50),
                 key_arguments=[
                     {"claim": a["claim"], "evidence": a["evidence"], "strength": a.get("strength", "moderate")}
@@ -137,7 +155,7 @@ class BaseAgent:
             logger.warning(f"{self.name} returned unparseable response: {e}")
             return AgentAnalysis(
                 agent_name=self.name,
-                position=Position.HOLD,
+                position=Position.WAIT,
                 confidence=30,
                 raw_reasoning=response_text,
                 data_gaps=[f"Failed to parse structured response: {e}"],
@@ -161,7 +179,7 @@ class BaseAgent:
             f"OTHER ANALYSTS' POSITIONS:\n{others_text}\n\n"
             f"Respond with JSON: {{'rebuttals': [{{'target_agent': '...', 'target_claim': '...', "
             f"'response': '...', 'concedes': true/false}}], 'concessions': ['...'], "
-            f"'updated_position': 'BUY|SELL|HOLD|STRONG_BUY|STRONG_SELL', "
+            f"'updated_position': 'BUY|WAIT|AVOID|STRONG_BUY|STRONG_AVOID', "
             f"'updated_confidence': 0-100, 'strongest_opposing_point': '...'}}"
         )
 
@@ -187,7 +205,7 @@ class BaseAgent:
                     for r in parsed.get("rebuttals", [])
                 ],
                 concessions=_clean_string_list(parsed.get("concessions", [])),
-                updated_position=Position(parsed.get("updated_position", "HOLD")),
+                updated_position=_parse_position(parsed.get("updated_position", "WAIT")),
                 updated_confidence=parsed.get("updated_confidence", 50),
                 strongest_opposing_point=parsed.get("strongest_opposing_point", ""),
                 raw_reasoning=response_text,
@@ -196,7 +214,7 @@ class BaseAgent:
             logger.warning(f"{self.name} debate response unparseable: {e}")
             return DebateResponse(
                 agent_name=self.name,
-                updated_position=Position.HOLD,
+                updated_position=Position.WAIT,
                 updated_confidence=30,
                 raw_reasoning=response_text,
             )

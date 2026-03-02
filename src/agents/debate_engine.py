@@ -122,7 +122,7 @@ class DebateEngine:
                 analyses.append(
                     AgentAnalysis(
                         agent_name=agent.name,
-                        position="HOLD",
+                        position="WAIT",
                         confidence=0,
                         data_gaps=[f"Agent error: {e}"],
                     )
@@ -151,7 +151,7 @@ class DebateEngine:
                 responses.append(
                     DebateResponse(
                         agent_name=agent.name,
-                        updated_position="HOLD",
+                        updated_position="WAIT",
                         updated_confidence=0,
                     )
                 )

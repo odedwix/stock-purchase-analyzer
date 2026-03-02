@@ -25,8 +25,8 @@ st.markdown("""
         border-radius: 10px;
     }
     .recommendation-buy { color: #00c853; font-weight: bold; font-size: 1.5em; }
-    .recommendation-sell { color: #ff1744; font-weight: bold; font-size: 1.5em; }
-    .recommendation-hold { color: #ff9100; font-weight: bold; font-size: 1.5em; }
+    .recommendation-avoid { color: #ff1744; font-weight: bold; font-size: 1.5em; }
+    .recommendation-wait { color: #ff9100; font-weight: bold; font-size: 1.5em; }
     .confidence-high { color: #00c853; }
     .confidence-medium { color: #ff9100; }
     .confidence-low { color: #ff1744; }
@@ -36,6 +36,24 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+
+# Position display labels
+_POSITION_LABELS = {
+    "STRONG_BUY": "STRONG BUY — Great opportunity",
+    "BUY": "BUY — Good entry point",
+    "WAIT": "WAIT — Watch for better entry",
+    "AVOID": "AVOID — Poor risk/reward",
+    "STRONG_AVOID": "STRONG AVOID — Stay away",
+}
+
+_POSITION_EMOJI = {
+    "STRONG_BUY": "🟢",
+    "BUY": "🟢",
+    "WAIT": "🟡",
+    "AVOID": "🔴",
+    "STRONG_AVOID": "🔴",
+}
 
 
 def run_async(coro):
@@ -87,8 +105,8 @@ with st.sidebar:
         st.caption("Gemini API: Not configured ✗")
 
 # Main content
-st.title("Stock Purchase Analyzer")
-st.markdown("*AI-powered multi-agent stock analysis with debate-based recommendations*")
+st.title("Stock Investment Opportunity Analyzer")
+st.markdown("*AI-powered multi-agent analysis — should you BUY, WAIT, or AVOID?*")
 
 # Stock selection
 selected_stock = st.selectbox(
@@ -111,30 +129,65 @@ if selected_stock:
             st.markdown("---")
 
             # Recommendation header
-            position_color = {
-                "STRONG_BUY": "🟢", "BUY": "🟢",
-                "HOLD": "🟡",
-                "SELL": "🔴", "STRONG_SELL": "🔴",
-            }
-            emoji = position_color.get(rec.position.value, "⚪")
+            pos_val = rec.position.value
+            emoji = _POSITION_EMOJI.get(pos_val, "⚪")
+            label = _POSITION_LABELS.get(pos_val, pos_val)
 
-            st.header(f"{emoji} {rec.position.value} — {selected_stock}")
+            st.header(f"{emoji} {label} — {selected_stock}")
+
+            # ============================================================
+            # ENTRY & EXIT STRATEGY (MOST IMPORTANT)
+            # ============================================================
+            st.subheader("🎯 Entry & Exit Strategy")
+
+            col_entry, col_exit, col_risk = st.columns(3)
+
+            with col_entry:
+                st.markdown("**Entry Strategy**")
+                if rec.entry_price_aggressive:
+                    st.metric("Aggressive Entry (buy now)", f"${rec.entry_price_aggressive:.2f}")
+                elif rec.entry_price:
+                    st.metric("Entry Price", f"${rec.entry_price:.2f}")
+                if rec.entry_price_conservative:
+                    st.metric("Conservative Entry (wait for dip)", f"${rec.entry_price_conservative:.2f}")
+                if rec.scaling_plan:
+                    st.caption(f"Scaling: {rec.scaling_plan}")
+
+            with col_exit:
+                st.markdown("**Exit Strategy**")
+                if rec.exit_price_partial:
+                    st.metric("Partial Profit (sell 50%)", f"${rec.exit_price_partial:.2f}")
+                if rec.exit_price_full:
+                    st.metric("Full Target", f"${rec.exit_price_full:.2f}")
+                elif rec.exit_price:
+                    st.metric("Exit Price", f"${rec.exit_price:.2f}")
+
+            with col_risk:
+                st.markdown("**Risk Management**")
+                if rec.stop_loss_tight:
+                    st.metric("Stop Loss (tight)", f"${rec.stop_loss_tight:.2f}")
+                if rec.stop_loss_wide:
+                    st.metric("Stop Loss (wide)", f"${rec.stop_loss_wide:.2f}")
+                elif rec.stop_loss:
+                    st.metric("Stop Loss", f"${rec.stop_loss:.2f}")
+                if rec.position_size_pct:
+                    st.metric("Position Size", f"{rec.position_size_pct:.0f}% of portfolio")
 
             # Key metrics row
-            cols = st.columns(5)
+            cols = st.columns(4)
             with cols[0]:
                 st.metric("Confidence", f"{rec.confidence}%")
             with cols[1]:
-                st.metric("Entry Price", f"${rec.entry_price:.2f}" if rec.entry_price else "N/A")
-            with cols[2]:
-                st.metric("Exit Price", f"${rec.exit_price:.2f}" if rec.exit_price else "N/A")
-            with cols[3]:
-                st.metric("Stop Loss", f"${rec.stop_loss:.2f}" if rec.stop_loss else "N/A")
-            with cols[4]:
                 st.metric(
                     "Risk/Reward",
                     f"{rec.risk_reward_ratio:.1f}:1" if rec.risk_reward_ratio else "N/A",
                 )
+            with cols[2]:
+                if rec.estimated_upside_pct is not None:
+                    st.metric("Potential Upside", f"{rec.estimated_upside_pct:+.1f}%")
+            with cols[3]:
+                if rec.estimated_downside_pct is not None:
+                    st.metric("Potential Downside", f"{rec.estimated_downside_pct:+.1f}%")
 
             st.markdown("---")
 
@@ -153,19 +206,57 @@ if selected_stock:
                 for factor in rec.key_factors:
                     st.markdown(f"- {factor}")
 
+            st.markdown("---")
+
+            # ============================================================
+            # MULTI-TIMEFRAME OUTLOOK
+            # ============================================================
+            if rec.outlook_6_months or rec.outlook_1_year or rec.outlook_long_term:
+                st.header("🔮 Multi-Timeframe Outlook")
+                col_6m, col_1y, col_lt = st.columns(3)
+                with col_6m:
+                    st.subheader("6 Months")
+                    st.write(rec.outlook_6_months or "Not available")
+                with col_1y:
+                    st.subheader("1 Year")
+                    st.write(rec.outlook_1_year or "Not available")
+                with col_lt:
+                    st.subheader("Long-Term (2-5 yrs)")
+                    st.write(rec.outlook_long_term or "Not available")
+                st.markdown("---")
+
+            # ============================================================
+            # WHAT COULD CHANGE
+            # ============================================================
+            if rec.what_could_change or rec.contradictory_signals:
+                st.header("⚠️ What Could Change This Recommendation")
+
+                if rec.what_could_change:
+                    st.subheader("Events That Would Flip the Thesis")
+                    for item in rec.what_could_change:
+                        st.warning(f"↔️ {item}")
+
+                if rec.contradictory_signals:
+                    st.subheader("Contradictory Signals")
+                    for signal in rec.contradictory_signals:
+                        st.info(f"⚡ {signal}")
+                st.markdown("---")
+
+            # ============================================================
+            # INFLUENTIAL FIGURES
+            # ============================================================
+            if rec.influential_figures_summary:
+                st.header("👤 Influential Figures & Smart Money")
+                st.write(rec.influential_figures_summary)
+                st.markdown("---")
+
             # Additional info
-            col_info1, col_info2, col_info3 = st.columns(3)
+            col_info1, col_info2 = st.columns(2)
             with col_info1:
                 st.metric("Time Horizon", rec.time_horizon or "N/A")
             with col_info2:
-                if rec.estimated_upside_pct is not None:
-                    st.metric("Potential Upside", f"{rec.estimated_upside_pct:+.1f}%")
-            with col_info3:
-                if rec.estimated_downside_pct is not None:
-                    st.metric("Potential Downside", f"{rec.estimated_downside_pct:+.1f}%")
-
-            if rec.sector_etf_suggestion:
-                st.info(f"💡 Sector ETF suggestion: **{rec.sector_etf_suggestion}**")
+                if rec.sector_etf_suggestion:
+                    st.info(f"💡 Sector ETF suggestion: **{rec.sector_etf_suggestion}**")
 
             # Agent agreement
             agreement_pct = rec.agent_agreement_level * 100
@@ -277,14 +368,10 @@ if selected_stock:
             # ============================================================
             st.header("📱 Social Media & News Sentiment")
 
-            # Get sentiment data from the data package stored in the analysis
-            # We need to pull it from agent analyses since the data package isn't directly stored
-            # Instead, show sentiment summary from agent analysis
             col_reddit, col_twitter = st.columns(2)
 
             with col_reddit:
                 st.subheader("🤖 Reddit Summary")
-                # Find Sentiment Specialist's analysis
                 sentiment_agent = None
                 for analysis in transcript.phase1_analyses:
                     if analysis.agent_name == "Sentiment Specialist":
@@ -292,7 +379,6 @@ if selected_stock:
                         break
 
                 if sentiment_agent:
-                    # Show sentiment-related arguments
                     reddit_args = [
                         a for a in sentiment_agent.key_arguments
                         if any(kw in a.claim.lower() for kw in ["reddit", "social", "crowd", "wsb", "r/"])
@@ -302,7 +388,6 @@ if selected_stock:
                             st.markdown(f"**{arg.claim}**")
                             st.caption(arg.evidence)
                     else:
-                        # Show first few arguments as general sentiment
                         for arg in sentiment_agent.key_arguments[:3]:
                             st.markdown(f"**{arg.claim}**")
                             st.caption(arg.evidence)
@@ -321,7 +406,6 @@ if selected_stock:
                             st.markdown(f"**{arg.claim}**")
                             st.caption(arg.evidence)
                     else:
-                        # Show remaining sentiment arguments
                         shown = set()
                         for arg in sentiment_agent.key_arguments:
                             if arg.claim not in shown and len(shown) < 3:
@@ -341,13 +425,13 @@ if selected_stock:
                     break
 
             if macro_agent:
-                # Show geopolitical arguments
                 geo_args = [
                     a for a in macro_agent.key_arguments
                     if any(kw in a.claim.lower() for kw in [
                         "geopolit", "war", "conflict", "sanction", "tariff", "trade",
                         "iran", "china", "russia", "military", "oil", "energy",
                         "hormuz", "strait", "political", "trump", "election",
+                        "buffett", "goldman", "jpmorgan", "fed", "institutional",
                     ])
                 ]
                 if geo_args:
@@ -356,7 +440,6 @@ if selected_stock:
                         st.markdown(f"- {strength_emoji} **{arg.claim}**")
                         st.caption(f"  {arg.evidence}")
                 else:
-                    # Show all macro arguments
                     for arg in macro_agent.key_arguments[:5]:
                         st.markdown(f"- **{arg.claim}**")
                         st.caption(f"  {arg.evidence}")
