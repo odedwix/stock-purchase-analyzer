@@ -25,6 +25,10 @@ dependencies = [
     "streamlit>=1.40.0",
     # Caching
     "cachetools>=5.5.0",
+    # News & Sentiment
+    "finvizfinance>=1.0.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
     # HTTP
     "httpx>=0.27.0",
     # Environment

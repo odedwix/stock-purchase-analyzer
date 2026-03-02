@@ -3,23 +3,32 @@ import logging
 import time
 
 from src.agents.base_agent import BaseAgent
+from src.agents.macro_economist import MacroEconomistAgent
 from src.agents.moderator import ModeratorAgent
 from src.agents.risk_manager import RiskManagerAgent
+from src.agents.sentiment_specialist import SentimentSpecialistAgent
 from src.agents.stock_analyst import StockAnalystAgent
+from src.agents.technical_analyst import TechnicalAnalystAgent
 from src.agents.token_budget import TokenBudget
 from src.models.analysis import AgentAnalysis, DebateResponse, DebateTranscript, Recommendation
 from src.models.stock_data import StockDataPackage
 
 logger = logging.getLogger(__name__)
 
+# Delay between sequential agent calls to avoid Groq TPM rate limits (12K TPM)
+AGENT_DELAY_SECONDS = 6
+
 
 class DebateEngine:
-    """Orchestrates the 3-phase multi-agent debate."""
+    """Orchestrates the 3-phase multi-agent debate with 5 specialist agents."""
 
     def __init__(self):
         self.agents: list[BaseAgent] = [
             StockAnalystAgent(),
+            SentimentSpecialistAgent(),
             RiskManagerAgent(),
+            MacroEconomistAgent(),
+            TechnicalAnalystAgent(),
         ]
         self.moderator = ModeratorAgent()
 
@@ -31,7 +40,7 @@ class DebateEngine:
 
         logger.info(f"Starting debate for {symbol}")
 
-        # Phase 1: Independent analysis (parallel)
+        # Phase 1: Independent analysis (sequential to respect Groq rate limits)
         logger.info(f"Phase 1: Independent analysis ({len(self.agents)} agents)")
         phase1_results = await self._phase1_analyze(data, budget)
 
@@ -52,6 +61,7 @@ class DebateEngine:
 
         # Phase 3: Moderator synthesis
         logger.info("Phase 3: Moderator synthesis")
+        await asyncio.sleep(AGENT_DELAY_SECONDS)
         recommendation = await self.moderator.synthesize(
             symbol, phase1_results, phase2_rounds, budget
         )
@@ -76,24 +86,26 @@ class DebateEngine:
     async def _phase1_analyze(
         self, data: StockDataPackage, budget: TokenBudget
     ) -> list[AgentAnalysis]:
-        """Run all agents' independent analysis in parallel."""
-        tasks = [agent.analyze(data, budget) for agent in self.agents]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
+        """Run agents sequentially with delays to respect Groq TPM rate limits."""
         analyses = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"Agent {self.agents[i].name} failed: {result}")
+        for i, agent in enumerate(self.agents):
+            if i > 0:
+                logger.info(f"Waiting {AGENT_DELAY_SECONDS}s before next agent (rate limit)...")
+                await asyncio.sleep(AGENT_DELAY_SECONDS)
+            try:
+                logger.info(f"  Agent {i + 1}/{len(self.agents)}: {agent.name}")
+                result = await agent.analyze(data, budget)
+                analyses.append(result)
+            except Exception as e:
+                logger.error(f"Agent {agent.name} failed: {e}")
                 analyses.append(
                     AgentAnalysis(
-                        agent_name=self.agents[i].name,
+                        agent_name=agent.name,
                         position="HOLD",
                         confidence=0,
-                        data_gaps=[f"Agent error: {result}"],
+                        data_gaps=[f"Agent error: {e}"],
                     )
                 )
-            else:
-                analyses.append(result)
 
         return analyses
 
@@ -103,25 +115,24 @@ class DebateEngine:
         phase1_analyses: list[AgentAnalysis],
         budget: TokenBudget,
     ) -> list[DebateResponse]:
-        """Run one round of debate where agents respond to each other."""
-        tasks = [
-            agent.debate_respond(data, phase1_analyses, budget) for agent in self.agents
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
+        """Run one round of debate sequentially to respect rate limits."""
         responses = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"Agent {self.agents[i].name} debate failed: {result}")
+        for i, agent in enumerate(self.agents):
+            if i > 0:
+                await asyncio.sleep(AGENT_DELAY_SECONDS)
+            try:
+                logger.info(f"  Debate {i + 1}/{len(self.agents)}: {agent.name}")
+                result = await agent.debate_respond(data, phase1_analyses, budget)
+                responses.append(result)
+            except Exception as e:
+                logger.error(f"Agent {agent.name} debate failed: {e}")
                 responses.append(
                     DebateResponse(
-                        agent_name=self.agents[i].name,
+                        agent_name=agent.name,
                         updated_position="HOLD",
                         updated_confidence=0,
                     )
                 )
-            else:
-                responses.append(result)
 
         return responses
 

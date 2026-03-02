@@ -7,15 +7,15 @@ logger = logging.getLogger(__name__)
 class TokenBudget:
     """Tracks and enforces token spending within a single analysis run.
 
-    Designed to stay within Gemini free tier limits:
-    - 15 requests per minute
-    - 1M tokens per day
+    Designed to stay within Groq free tier limits:
+    - 30 requests per minute
+    - 14,400 requests per day
     """
 
     def __init__(
         self,
-        max_requests_per_minute: int = 15,
-        max_tokens_per_day: int = 1_000_000,
+        max_requests_per_minute: int = 30,
+        max_tokens_per_day: int = 500_000,
     ):
         self.max_rpm = max_requests_per_minute
         self.max_daily_tokens = max_tokens_per_day
