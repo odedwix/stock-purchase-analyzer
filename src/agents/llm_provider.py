@@ -1,4 +1,3 @@
-import json
 import logging
 from abc import ABC, abstractmethod
 
@@ -25,18 +24,14 @@ class LLMProvider(ABC):
         ...
 
 
-class GeminiProvider(LLMProvider):
-    """Google Gemini API provider."""
+class GroqProvider(LLMProvider):
+    """Groq API provider. Free tier: 30 req/min, 14,400 req/day."""
 
     def __init__(self, model: str | None = None):
-        import google.generativeai as genai
+        from groq import AsyncGroq
 
-        genai.configure(api_key=settings.gemini_api_key)
-        self.model_name = model or settings.gemini_agent_model
-        self.model = genai.GenerativeModel(
-            self.model_name,
-            system_instruction=None,  # Set per-call
-        )
+        self.model_name = model or settings.groq_model
+        self.client = AsyncGroq(api_key=settings.groq_api_key)
 
     async def generate(
         self,
@@ -45,26 +40,57 @@ class GeminiProvider(LLMProvider):
         max_tokens: int = 2000,
         temperature: float = 0.7,
     ) -> tuple[str, int, int]:
-        import google.generativeai as genai
+        response = await self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
 
-        model = genai.GenerativeModel(
-            self.model_name,
-            system_instruction=system_prompt,
-            generation_config=genai.GenerationConfig(
+        text = response.choices[0].message.content or ""
+        input_tokens = response.usage.prompt_tokens if response.usage else 0
+        output_tokens = response.usage.completion_tokens if response.usage else 0
+
+        return text, input_tokens, output_tokens
+
+
+class GeminiProvider(LLMProvider):
+    """Google Gemini API provider using the new google-genai SDK."""
+
+    def __init__(self, model: str | None = None):
+        from google import genai
+
+        self.model_name = model or settings.gemini_agent_model
+        self.client = genai.Client(api_key=settings.gemini_api_key)
+
+    async def generate(
+        self,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: int = 2000,
+        temperature: float = 0.7,
+    ) -> tuple[str, int, int]:
+        from google.genai import types
+
+        response = await self.client.aio.models.generate_content(
+            model=self.model_name,
+            contents=user_message,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
                 max_output_tokens=max_tokens,
                 temperature=temperature,
             ),
         )
 
-        response = await model.generate_content_async(user_message)
-
         text = response.text
-        # Estimate token counts from usage metadata if available
         input_tokens = 0
         output_tokens = 0
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0)
-            output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0)
+        if response.usage_metadata:
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
 
         return text, input_tokens, output_tokens
 
@@ -117,9 +143,14 @@ def get_provider(role: str = "agent") -> LLMProvider:
     Args:
         role: "agent" for reasoning tasks, "summarizer" for data condensation
     """
-    if settings.llm_provider == "ollama":
+    provider = settings.llm_provider
+
+    if provider == "ollama":
         return OllamaProvider()
 
-    # Default to Gemini
-    model = settings.gemini_agent_model if role == "agent" else settings.gemini_summarizer_model
-    return GeminiProvider(model=model)
+    if provider == "gemini":
+        model = settings.gemini_agent_model if role == "agent" else settings.gemini_summarizer_model
+        return GeminiProvider(model=model)
+
+    # Default to Groq
+    return GroqProvider()

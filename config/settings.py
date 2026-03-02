@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     )
 
     # LLM Provider
-    llm_provider: str = Field(default="gemini", description="gemini or ollama")
+    llm_provider: str = Field(default="groq", description="groq, gemini, or ollama")
+
+    # Groq (default — free tier: 30 req/min, 14,400 req/day)
+    groq_api_key: str = Field(default="", description="Groq API key")
+    groq_model: str = Field(
+        default="llama-3.3-70b-versatile", description="Groq model for agent reasoning"
+    )
 
     # Google Gemini
     gemini_api_key: str = Field(default="", description="Google Gemini API key")
@@ -41,9 +47,9 @@ class Settings(BaseSettings):
     # FRED
     fred_api_key: str = Field(default="")
 
-    # Token budget (Gemini free tier limits)
-    max_requests_per_minute: int = Field(default=15)
-    max_tokens_per_day: int = Field(default=1_000_000)
+    # Token budget (Groq free tier limits)
+    max_requests_per_minute: int = Field(default=30)
+    max_tokens_per_day: int = Field(default=500_000)
 
     # Cache TTL (seconds)
     price_cache_ttl: int = Field(default=900, description="15 minutes")
