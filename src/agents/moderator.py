@@ -1,7 +1,6 @@
-import json
 import logging
-import re
 
+from src.agents.base_agent import _clean_price, _extract_json
 from src.agents.llm_provider import LLMProvider, get_provider
 from src.agents.token_budget import TokenBudget
 from src.models.analysis import (
@@ -46,28 +45,21 @@ class ModeratorAgent:
         response_text, input_tokens, output_tokens = await self.provider.generate(
             system_prompt=self.system_prompt,
             user_message=user_message,
-            max_tokens=2500,
+            max_tokens=4000,
             temperature=0.5,  # Lower temp for more consistent synthesis
         )
         budget.record_usage(input_tokens, output_tokens)
 
         try:
-            # Extract JSON
-            match = re.search(r"```(?:json)?\s*([\s\S]*?)```", response_text)
-            json_text = match.group(1).strip() if match else response_text
-            match = re.search(r"\{[\s\S]*\}", json_text)
-            if match:
-                json_text = match.group(0)
-
-            parsed = json.loads(json_text)
+            parsed = _extract_json(response_text)
 
             return Recommendation(
                 symbol=symbol,
                 position=Position(parsed.get("position", "HOLD")),
                 confidence=parsed.get("confidence", 50),
-                entry_price=parsed.get("entry_price"),
-                exit_price=parsed.get("exit_price"),
-                stop_loss=parsed.get("stop_loss"),
+                entry_price=_clean_price(parsed.get("entry_price")),
+                exit_price=_clean_price(parsed.get("exit_price")),
+                stop_loss=_clean_price(parsed.get("stop_loss")),
                 risk_reward_ratio=parsed.get("risk_reward_ratio"),
                 estimated_upside_pct=parsed.get("estimated_upside_pct"),
                 estimated_downside_pct=parsed.get("estimated_downside_pct"),

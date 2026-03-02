@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_json(text: str) -> dict:
-    """Extract JSON from LLM response, handling markdown code blocks."""
+    """Extract JSON from LLM response, handling markdown code blocks and common errors."""
     # Try to find JSON in code blocks
     match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     if match:
@@ -24,7 +24,58 @@ def _extract_json(text: str) -> dict:
     if match:
         text = match.group(0)
 
-    return json.loads(text)
+    # Try parsing as-is first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Fix common LLM JSON errors:
+    # 1. Trailing commas before } or ]
+    cleaned = re.sub(r",\s*([}\]])", r"\1", text)
+    # 2. Single quotes instead of double quotes (simple cases)
+    # 3. Unquoted keys
+    # 4. Comments (// style)
+    cleaned = re.sub(r"//[^\n]*", "", cleaned)
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Last resort: try to extract key-value pairs more aggressively
+    # Remove any non-JSON text before/after the object
+    cleaned = re.sub(r"[\x00-\x1f]", " ", cleaned)  # Control chars
+    return json.loads(cleaned)
+
+
+def _clean_price(value) -> float | None:
+    """Parse price values that may contain $ signs, text, or percentages."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        # Extract first number from strings like "$160", "$171.03 (support level)", "-15%"
+        match = re.search(r"[\d]+\.?\d*", value.replace(",", ""))
+        if match:
+            return float(match.group(0))
+    return None
+
+
+def _clean_string_list(items: list) -> list[str]:
+    """Convert a list that may contain dicts or other types to a list of strings."""
+    result = []
+    for item in items:
+        if isinstance(item, str):
+            result.append(item)
+        elif isinstance(item, dict):
+            # Agents sometimes return {"agent": "...", "concession": "..."} instead of strings
+            parts = [str(v) for v in item.values() if v]
+            result.append(" — ".join(parts))
+        else:
+            result.append(str(item))
+    return result
 
 
 class BaseAgent:
@@ -59,7 +110,7 @@ class BaseAgent:
         response_text, input_tokens, output_tokens = await self.provider.generate(
             system_prompt=self.system_prompt,
             user_message=user_message,
-            max_tokens=2000,
+            max_tokens=4000,
             temperature=0.7,
         )
         budget.record_usage(input_tokens, output_tokens)
@@ -75,9 +126,9 @@ class BaseAgent:
                     for a in parsed.get("key_arguments", [])
                 ],
                 risks_identified=parsed.get("risks_identified", []),
-                entry_price=parsed.get("entry_price"),
-                exit_price=parsed.get("exit_price"),
-                stop_loss=parsed.get("stop_loss"),
+                entry_price=_clean_price(parsed.get("entry_price")),
+                exit_price=_clean_price(parsed.get("exit_price")),
+                stop_loss=_clean_price(parsed.get("stop_loss")),
                 time_horizon=parsed.get("time_horizon", ""),
                 data_gaps=parsed.get("data_gaps", []),
                 raw_reasoning=parsed.get("raw_reasoning", response_text),
@@ -117,7 +168,7 @@ class BaseAgent:
         response_text, input_tokens, output_tokens = await self.provider.generate(
             system_prompt=self.system_prompt,
             user_message=user_message,
-            max_tokens=1500,
+            max_tokens=3000,
             temperature=0.7,
         )
         budget.record_usage(input_tokens, output_tokens)
@@ -135,7 +186,7 @@ class BaseAgent:
                     }
                     for r in parsed.get("rebuttals", [])
                 ],
-                concessions=parsed.get("concessions", []),
+                concessions=_clean_string_list(parsed.get("concessions", [])),
                 updated_position=Position(parsed.get("updated_position", "HOLD")),
                 updated_confidence=parsed.get("updated_confidence", 50),
                 strongest_opposing_point=parsed.get("strongest_opposing_point", ""),

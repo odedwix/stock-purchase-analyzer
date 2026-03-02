@@ -69,6 +69,9 @@ class DataAggregator:
             fear_greed_label=fg_label,
             reddit_sentiment=reddit_data.get("sentiment_score", 0) if reddit_data else 0,
             reddit_mention_count=reddit_data.get("mention_count", 0) if reddit_data else 0,
+            reddit_bullish_count=reddit_data.get("bullish_count", 0) if reddit_data else 0,
+            reddit_bearish_count=reddit_data.get("bearish_count", 0) if reddit_data else 0,
+            reddit_subreddit_breakdown=reddit_data.get("subreddit_breakdown", {}) if reddit_data else {},
             reddit_top_posts=reddit_data.get("top_posts", []) if reddit_data else [],
             news_items=news_items,
         )

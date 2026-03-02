@@ -15,8 +15,11 @@ from src.models.stock_data import StockDataPackage
 
 logger = logging.getLogger(__name__)
 
-# Delay between sequential agent calls to avoid Groq TPM rate limits (12K TPM)
-AGENT_DELAY_SECONDS = 6
+
+def _get_agent_delay() -> float:
+    """Get delay between agent calls. 0 for local (Ollama), 6s for API providers."""
+    from config.settings import settings
+    return 0 if settings.llm_provider == "ollama" else 6
 
 
 class DebateEngine:
@@ -61,7 +64,9 @@ class DebateEngine:
 
         # Phase 3: Moderator synthesis
         logger.info("Phase 3: Moderator synthesis")
-        await asyncio.sleep(AGENT_DELAY_SECONDS)
+        delay = _get_agent_delay()
+        if delay > 0:
+            await asyncio.sleep(delay)
         recommendation = await self.moderator.synthesize(
             symbol, phase1_results, phase2_rounds, budget
         )
@@ -86,12 +91,13 @@ class DebateEngine:
     async def _phase1_analyze(
         self, data: StockDataPackage, budget: TokenBudget
     ) -> list[AgentAnalysis]:
-        """Run agents sequentially with delays to respect Groq TPM rate limits."""
+        """Run agents sequentially with delays to respect API rate limits."""
+        delay = _get_agent_delay()
         analyses = []
         for i, agent in enumerate(self.agents):
-            if i > 0:
-                logger.info(f"Waiting {AGENT_DELAY_SECONDS}s before next agent (rate limit)...")
-                await asyncio.sleep(AGENT_DELAY_SECONDS)
+            if i > 0 and delay > 0:
+                logger.info(f"Waiting {delay}s before next agent (rate limit)...")
+                await asyncio.sleep(delay)
             try:
                 logger.info(f"  Agent {i + 1}/{len(self.agents)}: {agent.name}")
                 result = await agent.analyze(data, budget)
@@ -116,10 +122,11 @@ class DebateEngine:
         budget: TokenBudget,
     ) -> list[DebateResponse]:
         """Run one round of debate sequentially to respect rate limits."""
+        delay = _get_agent_delay()
         responses = []
         for i, agent in enumerate(self.agents):
-            if i > 0:
-                await asyncio.sleep(AGENT_DELAY_SECONDS)
+            if i > 0 and delay > 0:
+                await asyncio.sleep(delay)
             try:
                 logger.info(f"  Debate {i + 1}/{len(self.agents)}: {agent.name}")
                 result = await agent.debate_respond(data, phase1_analyses, budget)

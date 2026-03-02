@@ -23,10 +23,28 @@ class PriceData(BaseModel):
     currency: str = "USD"
     timestamp: datetime = Field(default_factory=datetime.now)
 
+    # Pre-market and after-hours
+    pre_market_price: float | None = None
+    pre_market_change_pct: float | None = None
+    post_market_price: float | None = None
+    post_market_change_pct: float | None = None
+
+    # Multi-timeframe price changes
+    change_5d_pct: float | None = None
+    change_1m_pct: float | None = None
+    change_3m_pct: float | None = None
+    change_6m_pct: float | None = None
+    change_ytd_pct: float | None = None
+
     # Historical data as serializable lists (converted from DataFrame)
     history_dates: list[str] = Field(default_factory=list)
     history_close: list[float] = Field(default_factory=list)
     history_volume: list[int] = Field(default_factory=list)
+
+    # Intraday data — last 5 trading days at 1-hour intervals
+    intraday_dates: list[str] = Field(default_factory=list)
+    intraday_close: list[float] = Field(default_factory=list)
+    intraday_volume: list[int] = Field(default_factory=list)
 
     @property
     def price_change_pct(self) -> float:
@@ -108,6 +126,9 @@ class SentimentData(BaseModel):
     news_sentiment: float | None = None  # -1.0 to 1.0
     reddit_sentiment: float | None = None  # -1.0 to 1.0
     reddit_mention_count: int = 0
+    reddit_bullish_count: int = 0
+    reddit_bearish_count: int = 0
+    reddit_subreddit_breakdown: dict[str, int] = Field(default_factory=dict)
     news_items: list[NewsItem] = Field(default_factory=list)
     reddit_top_posts: list[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -163,12 +184,39 @@ class StockDataPackage(BaseModel):
         parts = [f"=== Data Package for {self.symbol} ===\n"]
 
         if self.price:
-            parts.append(f"PRICE: ${self.price.current_price:.2f}")
-            parts.append(f"  Change: {self.price.price_change_pct:+.2f}%")
-            parts.append(f"  52W Range: ${self.price.week_52_low:.2f} - ${self.price.week_52_high:.2f}")
-            parts.append(f"  From 52W High: {self.price.from_52w_high_pct:.1f}%")
-            parts.append(f"  Volume vs Avg: {self.price.volume_vs_avg:.2f}x")
-            parts.append(f"  Market Cap: ${self.price.market_cap:,.0f}\n")
+            p = self.price
+            parts.append(f"PRICE: ${p.current_price:.2f}")
+            parts.append(f"  Change (1D): {p.price_change_pct:+.2f}%")
+            if p.pre_market_price is not None:
+                chg = f" ({p.pre_market_change_pct:+.2f}%)" if p.pre_market_change_pct is not None else ""
+                parts.append(f"  Pre-Market: ${p.pre_market_price:.2f}{chg}")
+            if p.post_market_price is not None:
+                chg = f" ({p.post_market_change_pct:+.2f}%)" if p.post_market_change_pct is not None else ""
+                parts.append(f"  After-Hours: ${p.post_market_price:.2f}{chg}")
+            # Multi-timeframe changes
+            tf_parts = []
+            if p.change_5d_pct is not None:
+                tf_parts.append(f"5D: {p.change_5d_pct:+.2f}%")
+            if p.change_1m_pct is not None:
+                tf_parts.append(f"1M: {p.change_1m_pct:+.2f}%")
+            if p.change_3m_pct is not None:
+                tf_parts.append(f"3M: {p.change_3m_pct:+.2f}%")
+            if p.change_6m_pct is not None:
+                tf_parts.append(f"6M: {p.change_6m_pct:+.2f}%")
+            if p.change_ytd_pct is not None:
+                tf_parts.append(f"YTD: {p.change_ytd_pct:+.2f}%")
+            if tf_parts:
+                parts.append(f"  Timeframe Changes: {' | '.join(tf_parts)}")
+            parts.append(f"  52W Range: ${p.week_52_low:.2f} - ${p.week_52_high:.2f}")
+            parts.append(f"  From 52W High: {p.from_52w_high_pct:.1f}%")
+            parts.append(f"  Volume vs Avg: {p.volume_vs_avg:.2f}x")
+            parts.append(f"  Market Cap: ${p.market_cap:,.0f}")
+            # Intraday summary
+            if p.intraday_close:
+                intraday_high = max(p.intraday_close)
+                intraday_low = min(p.intraday_close)
+                parts.append(f"  Intraday 5D Range (hourly): ${intraday_low:.2f} - ${intraday_high:.2f} ({len(p.intraday_close)} bars)")
+            parts.append("")
 
         if self.fundamentals:
             f = self.fundamentals
@@ -216,6 +264,11 @@ class StockDataPackage(BaseModel):
             if s.reddit_mention_count > 0:
                 parts.append(f"  Reddit Mentions: {s.reddit_mention_count}")
                 parts.append(f"  Reddit Sentiment: {s.reddit_sentiment:+.2f}")
+                if s.reddit_bullish_count or s.reddit_bearish_count:
+                    parts.append(f"  Reddit Bullish/Bearish: {s.reddit_bullish_count}/{s.reddit_bearish_count}")
+                if s.reddit_subreddit_breakdown:
+                    breakdown = ", ".join(f"r/{sub}: {cnt}" for sub, cnt in s.reddit_subreddit_breakdown.items())
+                    parts.append(f"  Subreddit Breakdown: {breakdown}")
             if s.news_items:
                 parts.append(f"  Recent News ({len(s.news_items)} articles):")
                 for item in s.news_items[:5]:
