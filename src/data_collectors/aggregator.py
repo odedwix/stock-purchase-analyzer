@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 
 from src.data_collectors.economic_collector import EconomicCollector
+from src.data_collectors.employee_sentiment_collector import EmployeeSentimentCollector
 from src.data_collectors.fear_greed import FearGreedCollector
 from src.data_collectors.fundamentals import FundamentalsCollector
 from src.data_collectors.insider_collector import InsiderCollector
@@ -12,7 +13,7 @@ from src.data_collectors.reddit_collector import RedditCollector
 from src.data_collectors.technical import TechnicalCollector
 from src.data_collectors.twitter_collector import TwitterCollector
 from src.data_collectors.world_news_collector import WorldNewsCollector
-from src.models.stock_data import SentimentData, StockDataPackage
+from src.models.stock_data import EmployeeSentimentData, SentimentData, StockDataPackage
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class DataAggregator:
         self.twitter_collector = TwitterCollector()
         self.economic_collector = EconomicCollector()
         self.insider_collector = InsiderCollector()
+        self.employee_sentiment_collector = EmployeeSentimentCollector()
 
     async def collect_all(self, symbol: str) -> StockDataPackage:
         """Collect all available data for a symbol."""
@@ -48,13 +50,14 @@ class DataAggregator:
             self.twitter_collector.collect(symbol),       # 7
             self.economic_collector.collect(symbol),      # 8
             self.insider_collector.collect(symbol),       # 9
+            self.employee_sentiment_collector.collect(symbol),  # 10
             return_exceptions=True,
         )
 
         collector_names = [
             "price", "fundamentals", "technical", "news",
             "reddit", "fear_greed", "world_news", "twitter",
-            "economic", "insider",
+            "economic", "insider", "employee_sentiment",
         ]
 
         # Extract results, log errors
@@ -77,6 +80,7 @@ class DataAggregator:
         twitter_data = extracted[7] or {}
         economic = extracted[8]
         insider_data = extracted[9] or {}
+        employee_data = extracted[10] or {}
 
         # Assemble sentiment data from multiple sources
         fg_score, fg_label = (None, None)
@@ -102,6 +106,20 @@ class DataAggregator:
             twitter_top_posts=twitter_data.get("posts", [])[:20] if twitter_data else [],
         )
 
+        # Assemble employee sentiment data
+        employee_sentiment = None
+        if employee_data:
+            employee_sentiment = EmployeeSentimentData(
+                symbol=symbol,
+                company_name=employee_data.get("company_name", ""),
+                overall_sentiment=employee_data.get("overall_sentiment", "mixed"),
+                key_themes=employee_data.get("key_themes", []),
+                recurring_issues=employee_data.get("recurring_issues", {}),
+                news_items=employee_data.get("news_items", []),
+                reddit_posts=employee_data.get("reddit_posts", []),
+                mention_count=employee_data.get("mention_count", 0),
+            )
+
         # Merge insider trading data into fundamentals
         if fundamentals and insider_data:
             fundamentals.insider_buys_90d = insider_data.get("insider_buys_90d", 0)
@@ -120,7 +138,8 @@ class DataAggregator:
             f"twitter={twitter_data.get('mention_count', 0) if twitter_data else 0} mentions, "
             f"fear_greed={fg_score}, "
             f"economic={'OK' if economic else 'FAIL'}, "
-            f"insider={len(insider_data.get('insider_transactions', [])) if insider_data else 0} filings"
+            f"insider={len(insider_data.get('insider_transactions', [])) if insider_data else 0} filings, "
+            f"employee={'OK' if employee_sentiment else 'FAIL'}"
         )
 
         return StockDataPackage(
@@ -130,6 +149,63 @@ class DataAggregator:
             technical=technical,
             sentiment=sentiment,
             economic=economic,
+            employee_sentiment=employee_sentiment,
             collection_errors=errors,
+            collected_at=datetime.now(),
+        )
+
+    async def collect_quick_look(self, symbol: str) -> StockDataPackage:
+        """Collect price + fundamentals + technicals for quick preview with charts."""
+        results = await asyncio.gather(
+            self.price_collector.collect(symbol),
+            self.fundamentals_collector.collect(symbol),
+            self.technical_collector.collect(symbol),
+            return_exceptions=True,
+        )
+        price = results[0] if not isinstance(results[0], Exception) else None
+        fundamentals = results[1] if not isinstance(results[1], Exception) else None
+        technical = results[2] if not isinstance(results[2], Exception) else None
+
+        return StockDataPackage(
+            symbol=symbol,
+            price=price,
+            fundamentals=fundamentals,
+            technical=technical,
+            collected_at=datetime.now(),
+        )
+
+    async def collect_market_overview(self) -> StockDataPackage:
+        """Collect only global macro data for market overview (no stock-specific data)."""
+        results = await asyncio.gather(
+            self.fear_greed_collector.collect("MARKET"),
+            self.world_news_collector.collect(""),
+            self.twitter_collector.collect("market"),
+            self.economic_collector.collect("MARKET"),
+            return_exceptions=True,
+        )
+
+        fear_greed = results[0] if not isinstance(results[0], Exception) else (None, None)
+        world_news = results[1] if not isinstance(results[1], Exception) else []
+        twitter_data = results[2] if not isinstance(results[2], Exception) else {}
+        economic = results[3] if not isinstance(results[3], Exception) else None
+
+        fg_score, fg_label = (None, None)
+        if isinstance(fear_greed, tuple):
+            fg_score, fg_label = fear_greed
+
+        sentiment = SentimentData(
+            symbol="MARKET",
+            fear_greed_index=fg_score,
+            fear_greed_label=fg_label,
+            world_news_items=world_news or [],
+            twitter_sentiment=twitter_data.get("sentiment_score", 0) if twitter_data else 0,
+            twitter_mention_count=twitter_data.get("mention_count", 0) if twitter_data else 0,
+            twitter_top_posts=twitter_data.get("posts", [])[:20] if twitter_data else [],
+        )
+
+        return StockDataPackage(
+            symbol="MARKET",
+            sentiment=sentiment,
+            economic=economic,
             collected_at=datetime.now(),
         )

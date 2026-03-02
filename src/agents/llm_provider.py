@@ -40,21 +40,35 @@ class GroqProvider(LLMProvider):
         max_tokens: int = 2000,
         temperature: float = 0.7,
     ) -> tuple[str, int, int]:
-        response = await self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+        import asyncio
 
-        text = response.choices[0].message.content or ""
-        input_tokens = response.usage.prompt_tokens if response.usage else 0
-        output_tokens = response.usage.completion_tokens if response.usage else 0
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message},
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
 
-        return text, input_tokens, output_tokens
+                text = response.choices[0].message.content or ""
+                input_tokens = response.usage.prompt_tokens if response.usage else 0
+                output_tokens = response.usage.completion_tokens if response.usage else 0
+
+                return text, input_tokens, output_tokens
+            except Exception as e:
+                err_str = str(e)
+                is_rate_limit = "429" in err_str or "413" in err_str or "rate_limit" in err_str.lower()
+                if is_rate_limit and attempt < max_retries - 1:
+                    wait = (attempt + 1) * 30
+                    logger.warning(f"Groq rate limited (attempt {attempt+1}/{max_retries}), retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                else:
+                    raise
 
 
 class GeminiProvider(LLMProvider):
@@ -123,21 +137,36 @@ class AnthropicProvider(LLMProvider):
         max_tokens: int = 2000,
         temperature: float = 0.7,
     ) -> tuple[str, int, int]:
-        response = await self.client.messages.create(
-            model=self.model_name,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_message},
-            ],
-        )
+        import asyncio
 
-        text = response.content[0].text if response.content else ""
-        input_tokens = response.usage.input_tokens
-        output_tokens = response.usage.output_tokens
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.messages.create(
+                    model=self.model_name,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    system=system_prompt,
+                    messages=[
+                        {"role": "user", "content": user_message},
+                    ],
+                )
 
-        return text, input_tokens, output_tokens
+                text = response.content[0].text if response.content else ""
+                input_tokens = response.usage.input_tokens
+                output_tokens = response.usage.output_tokens
+
+                return text, input_tokens, output_tokens
+            except Exception as e:
+                err_str = str(e)
+                is_overloaded = "529" in err_str or "overloaded" in err_str.lower()
+                is_rate_limit = "429" in err_str or "rate" in err_str.lower()
+                if (is_overloaded or is_rate_limit) and attempt < max_retries - 1:
+                    wait = (attempt + 1) * 10
+                    logger.warning(f"Anthropic API overloaded (attempt {attempt+1}/{max_retries}), retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                else:
+                    raise
 
 
 class OllamaProvider(LLMProvider):

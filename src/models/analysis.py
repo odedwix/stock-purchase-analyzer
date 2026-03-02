@@ -119,6 +119,9 @@ class Recommendation(BaseModel):
     # Influential figures
     influential_figures_summary: str = ""
 
+    # Business quality
+    moat_assessment: str = ""  # "WIDE — ...", "NARROW — ...", or "NONE — ..."
+
     # Agreement
     agent_agreement_level: float = Field(
         default=0.0, ge=0, le=1, description="0=total disagreement, 1=unanimous"

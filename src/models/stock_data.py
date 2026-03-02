@@ -118,6 +118,29 @@ class FundamentalsData(BaseModel):
     insider_net_shares: int = 0
     insider_transactions: list[str] = Field(default_factory=list)
 
+    # Business profile
+    business_description: str = ""  # yfinance longBusinessSummary (truncated)
+    full_time_employees: int | None = None
+
+    # Quarterly earnings history (last 8 quarters)
+    quarterly_earnings: list[dict] = Field(default_factory=list)
+    # Each: {"quarter": "2024-Q3", "eps_actual": 1.23, "eps_estimate": 1.15, "surprise_pct": 6.96}
+
+    # Analyst upgrade/downgrade history
+    analyst_actions: list[str] = Field(default_factory=list)
+
+    # Top institutional holders
+    top_institutional_holders: list[str] = Field(default_factory=list)
+
+    # Dividend history summary
+    dividend_history_summary: str = ""
+
+    # Competitor tickers (same industry)
+    competitor_tickers: list[str] = Field(default_factory=list)
+
+    # Recent earnings call news headlines
+    earnings_news: list[str] = Field(default_factory=list)
+
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
@@ -130,6 +153,20 @@ class NewsItem(BaseModel):
     published_at: str = ""
     snippet: str = ""
     sentiment_score: float | None = None  # -1.0 to 1.0
+
+
+class EmployeeSentimentData(BaseModel):
+    """What employees say about the company — culture, management, innovation."""
+
+    symbol: str
+    company_name: str = ""
+    overall_sentiment: str = ""  # "positive", "mixed", "negative"
+    key_themes: list[str] = Field(default_factory=list)
+    recurring_issues: dict = Field(default_factory=dict)  # theme -> {reddit_mentions, news_mentions, ...}
+    news_items: list["NewsItem"] = Field(default_factory=list)
+    reddit_posts: list[str] = Field(default_factory=list)
+    mention_count: int = 0
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 
 class SentimentData(BaseModel):
@@ -209,12 +246,24 @@ class StockDataPackage(BaseModel):
     sentiment: SentimentData | None = None
     technical: TechnicalData | None = None
     economic: EconomicData | None = None
+    employee_sentiment: EmployeeSentimentData | None = None
     collection_errors: list[str] = Field(default_factory=list)
     collected_at: datetime = Field(default_factory=datetime.now)
 
     def to_summary_text(self) -> str:
         """Create a human-readable summary for LLM consumption."""
         parts = [f"=== Data Package for {self.symbol} ===\n"]
+
+        # Investor profile — shapes all recommendations
+        parts.append("INVESTOR PROFILE:")
+        parts.append("  This investor is NOT a day trader. They are a conservative,")
+        parts.append("  opportunity-focused investor who wants to make money without")
+        parts.append("  excessive risk when clear opportunities arise. They prefer few")
+        parts.append("  trades, hold only a few quality stocks at a time, and look for")
+        parts.append("  undervalued, low-risk opportunities with a margin of safety.")
+        parts.append("  Recommendations should reflect PATIENCE and QUALITY over frequency.")
+        parts.append("  Only recommend BUY when there is a genuine, clear opportunity.")
+        parts.append("")
 
         if self.price:
             p = self.price
@@ -292,6 +341,54 @@ class StockDataPackage(BaseModel):
                     parts.append(f"    - {txn}")
             parts.append("")
 
+            # Business Overview
+            if f.business_description:
+                parts.append("BUSINESS OVERVIEW:")
+                parts.append(f"  {f.business_description}")
+                if f.full_time_employees:
+                    parts.append(f"  Employees: {f.full_time_employees:,}")
+                if f.competitor_tickers:
+                    parts.append(f"  Key Competitors: {', '.join(f.competitor_tickers[:5])}")
+                parts.append("")
+
+            # Quarterly Earnings History
+            if f.quarterly_earnings:
+                parts.append(f"QUARTERLY EARNINGS (last {len(f.quarterly_earnings)} quarters):")
+                for q in f.quarterly_earnings[:6]:
+                    beat_miss = "BEAT" if q.get("surprise_pct", 0) > 0 else "MISS"
+                    parts.append(
+                        f"  {q.get('quarter', '?')}: EPS ${q.get('eps_actual', 'N/A')} "
+                        f"vs est ${q.get('eps_estimate', 'N/A')} "
+                        f"[{beat_miss} by {abs(q.get('surprise_pct', 0)):.1f}%]"
+                    )
+                beats = sum(1 for q in f.quarterly_earnings if q.get("surprise_pct", 0) > 0)
+                total = len(f.quarterly_earnings)
+                parts.append(f"  Beat rate: {beats}/{total} quarters")
+                if f.earnings_news:
+                    parts.append("  Recent Earnings News:")
+                    for item in f.earnings_news[:3]:
+                        parts.append(f"    - {item}")
+                parts.append("")
+
+            # Analyst Actions
+            if f.analyst_actions:
+                parts.append(f"RECENT ANALYST ACTIONS ({len(f.analyst_actions)} actions):")
+                for action in f.analyst_actions[:8]:
+                    parts.append(f"  - {action}")
+                parts.append("")
+
+            # Top Institutional Holders
+            if f.top_institutional_holders:
+                parts.append("TOP INSTITUTIONAL HOLDERS:")
+                for holder in f.top_institutional_holders[:5]:
+                    parts.append(f"  - {holder}")
+                parts.append("")
+
+            # Dividend History
+            if f.dividend_history_summary:
+                parts.append(f"DIVIDEND HISTORY: {f.dividend_history_summary}")
+                parts.append("")
+
         if self.technical:
             t = self.technical
             parts.append("TECHNICAL INDICATORS:")
@@ -362,6 +459,49 @@ class StockDataPackage(BaseModel):
                 parts.append(f"  Dollar Index (DXY): {e.dollar_index:.1f}")
                 if e.dollar_index_change_1m_pct is not None:
                     parts.append(f"    1M Change: {e.dollar_index_change_1m_pct:+.2f}%")
+            parts.append("")
+
+        if self.employee_sentiment:
+            emp = self.employee_sentiment
+            parts.append(f"EMPLOYEE SENTIMENT ({emp.company_name}):")
+            parts.append(f"  Overall: {emp.overall_sentiment.upper()}")
+            if emp.key_themes:
+                theme_labels = {
+                    "layoffs": "Layoffs/Restructuring",
+                    "hiring_growth": "Hiring & Growth",
+                    "poor_management": "Poor Management",
+                    "good_management": "Good Management",
+                    "innovation": "Innovation/R&D",
+                    "stagnation": "Stagnation/Outdated",
+                    "good_culture": "Good Culture",
+                    "bad_culture": "Toxic Culture",
+                    "compensation": "Compensation Discussions",
+                    "product_quality": "Product Quality",
+                }
+                themed = [theme_labels.get(t, t) for t in emp.key_themes]
+                parts.append(f"  Key Themes: {', '.join(themed)}")
+            # Recurring issues (confirmed across multiple sources)
+            if emp.recurring_issues:
+                parts.append("  RECURRING ISSUES (confirmed across multiple sources):")
+                for theme, data in emp.recurring_issues.items():
+                    source_str = "Reddit + News" if data.get("multi_source") else (
+                        "Reddit" if data.get("reddit_mentions", 0) > 0 else "News"
+                    )
+                    parts.append(
+                        f"    - {theme_labels.get(theme, theme)}: "
+                        f"{data.get('total_mentions', 0)} mentions ({source_str})"
+                    )
+                    for example in data.get("examples", [])[:2]:
+                        parts.append(f"      * {example}")
+
+            if emp.news_items:
+                parts.append(f"  Employee-Related News ({len(emp.news_items)} articles):")
+                for item in emp.news_items[:5]:
+                    parts.append(f"    - {item.title} ({item.source})")
+            if emp.reddit_posts:
+                parts.append(f"  Employee Reddit Posts ({len(emp.reddit_posts)} posts):")
+                for post in emp.reddit_posts[:5]:
+                    parts.append(f"    - {post}")
             parts.append("")
 
         if self.collection_errors:

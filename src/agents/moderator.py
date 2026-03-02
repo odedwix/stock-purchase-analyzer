@@ -90,6 +90,8 @@ class ModeratorAgent:
                 contradictory_signals=_clean_string_list(parsed.get("contradictory_signals", [])),
                 # Influential figures
                 influential_figures_summary=parsed.get("influential_figures_summary", ""),
+                # Business quality
+                moat_assessment=parsed.get("moat_assessment", ""),
                 # Agreement
                 agent_agreement_level=parsed.get("agent_agreement_level", 0.5),
                 sector_etf_suggestion=parsed.get("sector_etf_suggestion"),

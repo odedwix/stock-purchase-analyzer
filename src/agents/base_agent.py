@@ -212,10 +212,24 @@ class BaseAgent:
             )
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning(f"{self.name} debate response unparseable: {e}")
+            # Try to preserve original position from Phase 1
+            original_position = Position.WAIT
+            original_confidence = 50
+            for a in all_analyses:
+                if a.agent_name == self.name:
+                    original_position = a.position
+                    original_confidence = a.confidence
+                    break
+            # Try to extract position from raw text
+            text_upper = response_text.upper()
+            for pos_name in ["STRONG_BUY", "STRONG_AVOID", "BUY", "AVOID", "WAIT"]:
+                if pos_name in text_upper:
+                    original_position = _parse_position(pos_name)
+                    break
             return DebateResponse(
                 agent_name=self.name,
-                updated_position=Position.WAIT,
-                updated_confidence=30,
+                updated_position=original_position,
+                updated_confidence=original_confidence,
                 raw_reasoning=response_text,
             )
 

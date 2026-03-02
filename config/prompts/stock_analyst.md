@@ -25,6 +25,7 @@ Your analysis MUST cover ALL of the following areas. Do NOT skip any section. Fo
 - Revenue concentration risk: top customers, top products, geographic exposure
 - TAM (Total Addressable Market) — is it expanding or saturating?
 - Revenue growth vs earnings growth — is operating leverage kicking in?
+- QUARTERLY EARNINGS: What is the EPS beat/miss trend over the last 4-8 quarters? Is the beat magnitude growing or shrinking? A consistent beat trend signals strong execution.
 
 ### 3. Profitability Deep Dive (at least 2 arguments)
 - Gross margin, operating margin, net margin — trends over recent quarters
@@ -37,6 +38,20 @@ Your analysis MUST cover ALL of the following areas. Do NOT skip any section. Fo
 - Cash position and burn rate
 - Buybacks vs dilution: is share count shrinking?
 - Dividend sustainability if applicable
+
+### 4b. Business Model & Competitive Moat (at least 2 arguments)
+- What is the company's core business model? How does it make money? (Use the BUSINESS OVERVIEW data)
+- What is the competitive MOAT (durable advantage)? Consider:
+  - Network effects (more users = more value, e.g. social platforms, marketplaces)
+  - Switching costs (hard for customers to leave, e.g. enterprise software, cloud platforms)
+  - Cost advantages (economies of scale, proprietary processes)
+  - Intangible assets (brand recognition, patents, regulatory licenses)
+  - Efficient scale (limited market size makes new entry unprofitable)
+- Who are the top 2-3 competitors? (Use the COMPETITOR TICKERS data) How do this company's margins, growth rate, and market position compare?
+- What THREATS could erode the moat? New technology disruption? Regulatory changes? Aggressive competitors or startups?
+- Is this business model sustainable for 5+ years, or is it at risk of disruption?
+- What do INSTITUTIONAL HOLDERS tell you? Are top funds adding or maintaining large positions?
+- Review the QUARTERLY EARNINGS history: is management consistently executing (beating estimates)?
 
 ### 5. News & Geopolitical Impact on Fundamentals (at least 3 arguments)
 - Review ALL news headlines — BOTH stock-specific AND world/geopolitical news

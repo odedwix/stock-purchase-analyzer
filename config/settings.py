@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     )
 
     # LLM Provider
-    llm_provider: str = Field(default="groq", description="groq, gemini, ollama, or anthropic")
+    llm_provider: str = Field(default="anthropic", description="groq, gemini, ollama, or anthropic")
 
     # Anthropic Claude API
     anthropic_api_key: str = Field(default="", description="Anthropic API key")
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
 
     # Stock filters
     min_market_cap: float = Field(
-        default=2_000_000_000, description="Minimum market cap ($2B) to filter penny stocks"
+        default=500_000_000, description="Minimum market cap ($500M) to filter penny stocks"
     )
 
 
