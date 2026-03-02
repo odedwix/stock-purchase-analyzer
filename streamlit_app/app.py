@@ -496,16 +496,210 @@ if selected_stock:
                 "Get a free key at https://aistudio.google.com"
             )
         else:
-            with st.spinner(f"🔍 Analyzing {selected_stock}... This may take 1-2 minutes with local LLM."):
-                try:
-                    from src.services.analysis_service import AnalysisService
+            import time as _time
 
-                    service = AnalysisService()
-                    transcript = run_async(service.analyze_stock(selected_stock))
+            from src.agents.debate_engine import DebateEngine, _get_agent_delay
+            from src.agents.token_budget import TokenBudget
+            from src.data_collectors.aggregator import DataAggregator
+            from src.models.analysis import DebateTranscript
+            from src.utils.stock_filters import validate_ticker
+
+            try:
+                with st.status(f"🔍 Analyzing {selected_stock}...", expanded=True) as status:
+
+                    # ── Validate ticker ──────────────────────────
+                    is_valid, reason = run_async(validate_ticker(selected_stock))
+                    if not is_valid:
+                        st.error(f"Invalid ticker: {reason}")
+                        st.stop()
+
+                    # ── Step 1: Data Collection ──────────────────
+                    st.write("📡 **Collecting market data** — 10 sources in parallel...")
+                    t0 = _time.time()
+                    aggregator = DataAggregator()
+                    data_package = run_async(aggregator.collect_all(selected_stock))
+                    t_data = _time.time() - t0
+
+                    # Show data collection summary
+                    data_lines = []
+                    if data_package.price:
+                        p = data_package.price
+                        data_lines.append(
+                            f"💲 Price: **${p.current_price:.2f}** "
+                            f"({p.price_change_pct:+.2f}%) — "
+                            f"52W: ${p.week_52_low:.0f}–${p.week_52_high:.0f}"
+                        )
+                    if data_package.fundamentals:
+                        f = data_package.fundamentals
+                        pe_str = f" · P/E {f.pe_ratio:.1f}" if f.pe_ratio else ""
+                        data_lines.append(f"🏢 **{f.company_name}** ({f.sector}){pe_str}")
+                    if data_package.technical:
+                        t = data_package.technical
+                        rsi_str = f" · RSI {t.rsi_14:.0f}" if t.rsi_14 else ""
+                        data_lines.append(f"📈 Technical indicators ✓{rsi_str}")
+                    if data_package.sentiment:
+                        sent = data_package.sentiment
+                        sent_parts = []
+                        news_items = getattr(sent, "news_items", [])
+                        world_items = getattr(sent, "world_news_items", [])
+                        if news_items:
+                            sent_parts.append(f"{len(news_items)} stock news")
+                        if world_items:
+                            sent_parts.append(f"{len(world_items)} world news")
+                        if getattr(sent, "reddit_mention_count", 0):
+                            sent_parts.append(f"{sent.reddit_mention_count} Reddit mentions")
+                        if getattr(sent, "twitter_mention_count", 0):
+                            sent_parts.append(f"{sent.twitter_mention_count} tweets")
+                        if getattr(sent, "fear_greed_index", None) is not None:
+                            sent_parts.append(f"Fear&Greed: {sent.fear_greed_index} ({sent.fear_greed_label})")
+                        if sent_parts:
+                            data_lines.append(f"📰 {' · '.join(sent_parts)}")
+                    if data_package.economic:
+                        e = data_package.economic
+                        econ_parts = []
+                        if e.vix is not None:
+                            econ_parts.append(f"VIX {e.vix:.1f}")
+                        if e.sp500_level is not None:
+                            econ_parts.append(f"S&P {e.sp500_level:,.0f}")
+                        if e.yield_curve_spread is not None:
+                            econ_parts.append(
+                                f"Yield curve {'⚠️ inverted' if e.yield_curve_spread < 0 else '✓ normal'}"
+                            )
+                        if econ_parts:
+                            data_lines.append(f"🌐 Macro: {' · '.join(econ_parts)}")
+                    if data_package.fundamentals:
+                        ff = data_package.fundamentals
+                        if ff.insider_buys_90d + ff.insider_sells_90d > 0:
+                            data_lines.append(
+                                f"🔎 SEC insider trades: {ff.insider_buys_90d} buys, "
+                                f"{ff.insider_sells_90d} sells (90d)"
+                            )
+                    for line in data_lines:
+                        st.write(f"  {line}")
+                    if data_package.collection_errors:
+                        st.write(f"  ⚠️ {len(data_package.collection_errors)} source(s) had issues")
+                    st.write(f"  ✅ *Data collected in {t_data:.1f}s*")
+
+                    # ── Step 2: Phase 1 — Agent Analysis ─────────
+                    status.update(label=f"🧠 Phase 1: 6 agents analyzing {selected_stock}...")
+                    agent_names = [
+                        "Stock Analyst", "Sentiment Specialist", "Risk Manager",
+                        "Macro Economist", "Technical Analyst", "Sector Analyst",
+                    ]
+                    st.write(f"🧠 **Phase 1** — {len(agent_names)} AI agents analyzing in parallel...")
+
+                    t1 = _time.time()
+                    engine = DebateEngine()
+                    budget = TokenBudget()
+
+                    async def _phase1_and_sector():
+                        delay = _get_agent_delay()
+                        if delay == 0:
+                            return await asyncio.gather(
+                                engine._phase1_analyze(data_package, budget),
+                                engine._run_sector_analysis(data_package, budget),
+                            )
+                        else:
+                            p1 = await engine._phase1_analyze(data_package, budget)
+                            sec = await engine._run_sector_analysis(data_package, budget)
+                            return p1, sec
+
+                    phase1_results, sector_analysis = run_async(_phase1_and_sector())
+                    t_phase1 = _time.time() - t1
+
+                    # Show agent results
+                    for a in phase1_results:
+                        pos_str = a.position if isinstance(a.position, str) else a.position.value
+                        a_emoji = {"STRONG_BUY": "🟢", "BUY": "🟢", "WAIT": "🟡", "AVOID": "🔴", "STRONG_AVOID": "🔴"}.get(pos_str, "⚪")
+                        st.write(f"  {a_emoji} **{a.agent_name}**: {pos_str} ({a.confidence}%)")
+                    if sector_analysis and not sector_analysis.get("error"):
+                        st.write("  🌍 **Sector Analyst**: ✓")
+                    st.write(f"  ✅ *Phase 1 completed in {t_phase1:.1f}s*")
+
+                    # ── Step 3: Phase 2 — Debate (conditional) ───
+                    should_debate = engine._should_debate(phase1_results)
+                    phase2_rounds = []
+
+                    if should_debate:
+                        status.update(label=f"💬 Phase 2: Agents debating {selected_stock}...")
+                        positions = {
+                            (a.position if isinstance(a.position, str) else a.position.value)
+                            for a in phase1_results
+                        }
+                        st.write(f"💬 **Phase 2** — Debate needed ({len(positions)} distinct positions)...")
+
+                        t2 = _time.time()
+                        round1 = run_async(
+                            engine._phase2_debate_round(data_package, phase1_results, budget)
+                        )
+                        phase2_rounds.append(round1)
+
+                        r1_positions = set()
+                        for r in round1:
+                            p = r.updated_position
+                            r1_positions.add(p if isinstance(p, str) else p.value)
+                        st.write(f"  Round 1 → {', '.join(r1_positions)}")
+
+                        if engine._still_disagreeing(round1):
+                            st.write("  ↩️ Still disagreeing — Round 2...")
+                            round2 = run_async(
+                                engine._phase2_debate_round(data_package, phase1_results, budget)
+                            )
+                            phase2_rounds.append(round2)
+                            st.write("  Round 2 complete")
+
+                        t_phase2 = _time.time() - t2
+                        st.write(f"  ✅ *Debate completed in {t_phase2:.1f}s*")
+                    else:
+                        st.write("💬 **Phase 2** — Skipped (agents already in consensus ✓)")
+
+                    # ── Step 4: Phase 3 — Moderator ──────────────
+                    status.update(label=f"⚖️ Phase 3: Synthesizing recommendation for {selected_stock}...")
+                    st.write("⚖️ **Phase 3** — Moderator synthesizing final recommendation...")
+
+                    t3 = _time.time()
+                    recommendation = run_async(
+                        engine.moderator.synthesize(selected_stock, phase1_results, phase2_rounds, budget)
+                    )
+                    debate_total = _time.time() - t0
+                    recommendation.analysis_duration_seconds = debate_total
+                    recommendation.total_tokens_used = budget.total_tokens
+                    t_phase3 = _time.time() - t3
+
+                    # Build transcript
+                    transcript = DebateTranscript(
+                        symbol=selected_stock,
+                        phase1_analyses=phase1_results,
+                        phase2_rounds=phase2_rounds,
+                        moderator_synthesis=recommendation.bull_case + " | " + recommendation.bear_case,
+                        recommendation=recommendation,
+                        sector_analysis=sector_analysis,
+                    )
+
+                    pos_val = recommendation.position.value
+                    final_emoji = _POSITION_EMOJI.get(pos_val, "⚪")
+                    final_label = _POSITION_LABELS.get(pos_val, pos_val)
+                    st.write(f"  ✅ *Synthesis completed in {t_phase3:.1f}s*")
+                    st.write("")
+                    st.write(
+                        f"### {final_emoji} {final_label} — "
+                        f"{recommendation.confidence}% confidence"
+                    )
+                    st.write(f"*Total: {debate_total:.1f}s · {budget.total_tokens:,} tokens*")
+
+                    status.update(
+                        label=f"✅ {final_emoji} {selected_stock}: {final_label} ({recommendation.confidence}%)",
+                        state="complete",
+                    )
+
                     st.session_state[f"result_{selected_stock}"] = transcript
+                    _time.sleep(2)  # Brief pause so user can see the summary
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Analysis failed: {e}")
+
+            except Exception as e:
+                st.error(f"Analysis failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
 
 else:
     st.info("👆 Add stocks to your watchlist and select one to analyze.")

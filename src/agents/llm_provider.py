@@ -95,6 +95,51 @@ class GeminiProvider(LLMProvider):
         return text, input_tokens, output_tokens
 
 
+class AnthropicProvider(LLMProvider):
+    """Anthropic Claude API provider."""
+
+    def __init__(self, model: str | None = None):
+        import anthropic
+
+        self.model_name = model or settings.anthropic_model
+        api_key = settings.anthropic_api_key
+
+        # Fallback: shell env may override .env with empty string (e.g. from Claude Code)
+        if not api_key:
+            from dotenv import dotenv_values
+            from config.settings import PROJECT_ROOT
+            vals = dotenv_values(PROJECT_ROOT / ".env")
+            api_key = vals.get("ANTHROPIC_API_KEY", "")
+
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY not set in .env or environment")
+
+        self.client = anthropic.AsyncAnthropic(api_key=api_key)
+
+    async def generate(
+        self,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: int = 2000,
+        temperature: float = 0.7,
+    ) -> tuple[str, int, int]:
+        response = await self.client.messages.create(
+            model=self.model_name,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": user_message},
+            ],
+        )
+
+        text = response.content[0].text if response.content else ""
+        input_tokens = response.usage.input_tokens
+        output_tokens = response.usage.output_tokens
+
+        return text, input_tokens, output_tokens
+
+
 class OllamaProvider(LLMProvider):
     """Ollama local model provider."""
 
@@ -144,6 +189,9 @@ def get_provider(role: str = "agent") -> LLMProvider:
         role: "agent" for reasoning tasks, "summarizer" for data condensation
     """
     provider = settings.llm_provider
+
+    if provider == "anthropic":
+        return AnthropicProvider()
 
     if provider == "ollama":
         return OllamaProvider()

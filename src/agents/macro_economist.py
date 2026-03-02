@@ -58,7 +58,7 @@ class MacroEconomistAgent(BaseAgent):
             e = data.economic
             parts.append("MACRO INDICATORS:")
             if e.fed_funds_rate is not None:
-                parts.append(f"  Fed Funds Rate: {e.fed_funds_rate:.2f}%")
+                parts.append(f"  Fed Funds Rate (approx): {e.fed_funds_rate:.2f}%")
             if e.cpi_yoy is not None:
                 parts.append(f"  CPI (YoY): {e.cpi_yoy:.1f}%")
                 if e.fed_funds_rate is not None:
@@ -70,9 +70,34 @@ class MacroEconomistAgent(BaseAgent):
                 parts.append(f"  Unemployment: {e.unemployment_rate:.1f}%")
             if e.treasury_10y_yield is not None:
                 parts.append(f"  10Y Treasury Yield: {e.treasury_10y_yield:.2f}%")
+            if e.treasury_2y_yield is not None:
+                parts.append(f"  2Y Treasury Yield: {e.treasury_2y_yield:.2f}%")
+            if e.yield_curve_spread is not None:
+                if e.yield_curve_spread < 0:
+                    curve_signal = "INVERTED — historically precedes recessions by 6-18 months"
+                elif e.yield_curve_spread < 0.5:
+                    curve_signal = "FLAT — late-cycle signal, watch closely"
+                else:
+                    curve_signal = "NORMAL — healthy expansion signal"
+                parts.append(f"  Yield Curve (10Y-2Y): {e.yield_curve_spread:+.2f}% [{curve_signal}]")
             if e.vix is not None:
                 vix_level = "LOW (<15)" if e.vix < 15 else ("ELEVATED (15-25)" if e.vix < 25 else "HIGH (>25)")
                 parts.append(f"  VIX (Fear Gauge): {e.vix:.1f} [{vix_level}]")
+            if e.sp500_level is not None:
+                parts.append(f"  S&P 500: {e.sp500_level:,.1f}")
+                sp_parts = []
+                if e.sp500_change_1d_pct is not None:
+                    sp_parts.append(f"1D: {e.sp500_change_1d_pct:+.2f}%")
+                if e.sp500_change_1m_pct is not None:
+                    sp_parts.append(f"1M: {e.sp500_change_1m_pct:+.2f}%")
+                if sp_parts:
+                    parts.append(f"    Performance: {' | '.join(sp_parts)}")
+            if e.dollar_index is not None:
+                dollar_note = ""
+                if e.dollar_index_change_1m_pct is not None:
+                    direction = "strengthening" if e.dollar_index_change_1m_pct > 0 else "weakening"
+                    dollar_note = f" ({direction}, 1M: {e.dollar_index_change_1m_pct:+.1f}%)"
+                parts.append(f"  Dollar Index (DXY): {e.dollar_index:.1f}{dollar_note}")
             parts.append("")
 
         # Fear & Greed for market mood

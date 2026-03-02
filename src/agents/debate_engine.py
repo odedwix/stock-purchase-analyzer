@@ -18,9 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 def _get_agent_delay() -> float:
-    """Get delay between agent calls. 0 for local (Ollama), 6s for API providers."""
+    """Get delay between agent calls. 0 for local/fast APIs, 6s for rate-limited providers."""
     from config.settings import settings
-    return 0 if settings.llm_provider == "ollama" else 6
+    # Ollama (local) and Anthropic (fast API, high rate limits) can run in parallel
+    if settings.llm_provider in ("ollama", "anthropic"):
+        return 0
+    return 6  # Groq/Gemini need delays for rate limits
 
 
 class DebateEngine:
@@ -45,21 +48,21 @@ class DebateEngine:
 
         logger.info(f"Starting debate for {symbol}")
 
-        # Phase 1: Independent analysis (sequential to respect Groq rate limits)
-        logger.info(f"Phase 1: Independent analysis ({len(self.agents)} agents)")
-        phase1_results = await self._phase1_analyze(data, budget)
-
-        # Sector Impact Analysis (runs after Phase 1, uses same data)
-        logger.info("Running sector impact analysis...")
-        sector_analysis = {}
-        try:
-            delay = _get_agent_delay()
-            if delay > 0:
-                await asyncio.sleep(delay)
-            sector_analysis = await self.sector_analyst.analyze(data, budget)
-            logger.info("Sector analysis complete")
-        except Exception as e:
-            logger.warning(f"Sector analysis failed (non-fatal): {e}")
+        # Phase 1: Independent analysis + Sector analysis
+        delay = _get_agent_delay()
+        if delay == 0:
+            # Ollama: run Phase 1 agents AND sector analyst all in parallel
+            logger.info(f"Phase 1: All {len(self.agents) + 1} agents in parallel (Ollama)")
+            phase1_task = self._phase1_analyze(data, budget)
+            sector_task = self._run_sector_analysis(data, budget)
+            phase1_results, sector_analysis = await asyncio.gather(phase1_task, sector_task)
+        else:
+            # API: sequential
+            logger.info(f"Phase 1: Independent analysis ({len(self.agents)} agents)")
+            phase1_results = await self._phase1_analyze(data, budget)
+            logger.info("Running sector impact analysis...")
+            sector_analysis = await self._run_sector_analysis(data, budget)
+            await asyncio.sleep(delay)
 
         # Phase 2: Debate rounds
         phase2_rounds = []
@@ -106,29 +109,53 @@ class DebateEngine:
     async def _phase1_analyze(
         self, data: StockDataPackage, budget: TokenBudget
     ) -> list[AgentAnalysis]:
-        """Run agents sequentially with delays to respect API rate limits."""
+        """Run agents — parallel for Ollama, sequential for API providers."""
         delay = _get_agent_delay()
-        analyses = []
-        for i, agent in enumerate(self.agents):
-            if i > 0 and delay > 0:
-                logger.info(f"Waiting {delay}s before next agent (rate limit)...")
-                await asyncio.sleep(delay)
-            try:
-                logger.info(f"  Agent {i + 1}/{len(self.agents)}: {agent.name}")
-                result = await agent.analyze(data, budget)
-                analyses.append(result)
-            except Exception as e:
-                logger.error(f"Agent {agent.name} failed: {e}")
-                analyses.append(
-                    AgentAnalysis(
-                        agent_name=agent.name,
-                        position="WAIT",
-                        confidence=0,
-                        data_gaps=[f"Agent error: {e}"],
-                    )
-                )
 
-        return analyses
+        if delay == 0:
+            # Ollama: run all agents in parallel for ~5x speedup
+            logger.info("Running agents in parallel (Ollama)")
+            tasks = []
+            for agent in self.agents:
+                logger.info(f"  Launching: {agent.name}")
+                tasks.append(self._run_single_agent(agent, data, budget))
+            return list(await asyncio.gather(*tasks))
+        else:
+            # API providers: sequential with delays for rate limits
+            analyses = []
+            for i, agent in enumerate(self.agents):
+                if i > 0:
+                    logger.info(f"Waiting {delay}s before next agent (rate limit)...")
+                    await asyncio.sleep(delay)
+                logger.info(f"  Agent {i + 1}/{len(self.agents)}: {agent.name}")
+                result = await self._run_single_agent(agent, data, budget)
+                analyses.append(result)
+            return analyses
+
+    async def _run_single_agent(
+        self, agent: BaseAgent, data: StockDataPackage, budget: TokenBudget
+    ) -> AgentAnalysis:
+        """Run a single agent with error handling."""
+        try:
+            return await agent.analyze(data, budget)
+        except Exception as e:
+            logger.error(f"Agent {agent.name} failed: {e}")
+            return AgentAnalysis(
+                agent_name=agent.name,
+                position="WAIT",
+                confidence=0,
+                data_gaps=[f"Agent error: {e}"],
+            )
+
+    async def _run_sector_analysis(self, data: StockDataPackage, budget: TokenBudget) -> dict:
+        """Run sector analysis with error handling."""
+        try:
+            result = await self.sector_analyst.analyze(data, budget)
+            logger.info("Sector analysis complete")
+            return result
+        except Exception as e:
+            logger.warning(f"Sector analysis failed (non-fatal): {e}")
+            return {}
 
     async def _phase2_debate_round(
         self,
@@ -136,27 +163,43 @@ class DebateEngine:
         phase1_analyses: list[AgentAnalysis],
         budget: TokenBudget,
     ) -> list[DebateResponse]:
-        """Run one round of debate sequentially to respect rate limits."""
+        """Run one round of debate — parallel for Ollama, sequential for API."""
         delay = _get_agent_delay()
-        responses = []
-        for i, agent in enumerate(self.agents):
-            if i > 0 and delay > 0:
-                await asyncio.sleep(delay)
-            try:
-                logger.info(f"  Debate {i + 1}/{len(self.agents)}: {agent.name}")
-                result = await agent.debate_respond(data, phase1_analyses, budget)
-                responses.append(result)
-            except Exception as e:
-                logger.error(f"Agent {agent.name} debate failed: {e}")
-                responses.append(
-                    DebateResponse(
-                        agent_name=agent.name,
-                        updated_position="WAIT",
-                        updated_confidence=0,
-                    )
-                )
 
-        return responses
+        if delay == 0:
+            # Ollama: run debate responses in parallel
+            logger.info("Running debate round in parallel (Ollama)")
+            tasks = []
+            for agent in self.agents:
+                tasks.append(self._run_single_debate(agent, data, phase1_analyses, budget))
+            return list(await asyncio.gather(*tasks))
+        else:
+            responses = []
+            for i, agent in enumerate(self.agents):
+                if i > 0:
+                    await asyncio.sleep(delay)
+                logger.info(f"  Debate {i + 1}/{len(self.agents)}: {agent.name}")
+                result = await self._run_single_debate(agent, data, phase1_analyses, budget)
+                responses.append(result)
+            return responses
+
+    async def _run_single_debate(
+        self,
+        agent: BaseAgent,
+        data: StockDataPackage,
+        phase1_analyses: list[AgentAnalysis],
+        budget: TokenBudget,
+    ) -> DebateResponse:
+        """Run a single debate response with error handling."""
+        try:
+            return await agent.debate_respond(data, phase1_analyses, budget)
+        except Exception as e:
+            logger.error(f"Agent {agent.name} debate failed: {e}")
+            return DebateResponse(
+                agent_name=agent.name,
+                updated_position="WAIT",
+                updated_confidence=0,
+            )
 
     def _should_debate(self, analyses: list[AgentAnalysis]) -> bool:
         """Skip debate if all agents agree with high confidence."""

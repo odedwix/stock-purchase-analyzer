@@ -2,8 +2,10 @@ import asyncio
 import logging
 from datetime import datetime
 
+from src.data_collectors.economic_collector import EconomicCollector
 from src.data_collectors.fear_greed import FearGreedCollector
 from src.data_collectors.fundamentals import FundamentalsCollector
+from src.data_collectors.insider_collector import InsiderCollector
 from src.data_collectors.news_collector import NewsCollector
 from src.data_collectors.price_collector import PriceCollector
 from src.data_collectors.reddit_collector import RedditCollector
@@ -27,6 +29,8 @@ class DataAggregator:
         self.fear_greed_collector = FearGreedCollector()
         self.world_news_collector = WorldNewsCollector()
         self.twitter_collector = TwitterCollector()
+        self.economic_collector = EconomicCollector()
+        self.insider_collector = InsiderCollector()
 
     async def collect_all(self, symbol: str) -> StockDataPackage:
         """Collect all available data for a symbol."""
@@ -42,12 +46,15 @@ class DataAggregator:
             self.fear_greed_collector.collect(symbol),    # 5
             self.world_news_collector.collect(symbol),    # 6
             self.twitter_collector.collect(symbol),       # 7
+            self.economic_collector.collect(symbol),      # 8
+            self.insider_collector.collect(symbol),       # 9
             return_exceptions=True,
         )
 
         collector_names = [
             "price", "fundamentals", "technical", "news",
             "reddit", "fear_greed", "world_news", "twitter",
+            "economic", "insider",
         ]
 
         # Extract results, log errors
@@ -68,6 +75,8 @@ class DataAggregator:
         fear_greed = extracted[5] or (None, None)
         world_news_items = extracted[6] or []
         twitter_data = extracted[7] or {}
+        economic = extracted[8]
+        insider_data = extracted[9] or {}
 
         # Assemble sentiment data from multiple sources
         fg_score, fg_label = (None, None)
@@ -93,6 +102,13 @@ class DataAggregator:
             twitter_top_posts=twitter_data.get("posts", [])[:20] if twitter_data else [],
         )
 
+        # Merge insider trading data into fundamentals
+        if fundamentals and insider_data:
+            fundamentals.insider_buys_90d = insider_data.get("insider_buys_90d", 0)
+            fundamentals.insider_sells_90d = insider_data.get("insider_sells_90d", 0)
+            fundamentals.insider_net_shares = insider_data.get("insider_net_shares", 0)
+            fundamentals.insider_transactions = insider_data.get("insider_transactions", [])
+
         logger.info(
             f"Data collected for {symbol}: "
             f"price={'OK' if price else 'FAIL'}, "
@@ -102,7 +118,9 @@ class DataAggregator:
             f"world_news={len(world_news_items)} articles, "
             f"reddit={reddit_data.get('mention_count', 0) if reddit_data else 0} mentions, "
             f"twitter={twitter_data.get('mention_count', 0) if twitter_data else 0} mentions, "
-            f"fear_greed={fg_score}"
+            f"fear_greed={fg_score}, "
+            f"economic={'OK' if economic else 'FAIL'}, "
+            f"insider={len(insider_data.get('insider_transactions', [])) if insider_data else 0} filings"
         )
 
         return StockDataPackage(
@@ -111,6 +129,7 @@ class DataAggregator:
             fundamentals=fundamentals,
             technical=technical,
             sentiment=sentiment,
+            economic=economic,
             collection_errors=errors,
             collected_at=datetime.now(),
         )

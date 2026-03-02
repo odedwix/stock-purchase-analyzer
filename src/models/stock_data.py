@@ -103,6 +103,21 @@ class FundamentalsData(BaseModel):
     analyst_recommendation: str | None = None
     num_analyst_opinions: int | None = None
 
+    # Risk & ownership (yfinance)
+    beta: float | None = None
+    short_percent_of_float: float | None = None
+    short_ratio: float | None = None
+    shares_outstanding: float | None = None
+    held_pct_insiders: float | None = None
+    held_pct_institutions: float | None = None
+    earnings_date: str | None = None
+
+    # SEC EDGAR insider trading (last 90 days)
+    insider_buys_90d: int = 0
+    insider_sells_90d: int = 0
+    insider_net_shares: int = 0
+    insider_transactions: list[str] = Field(default_factory=list)
+
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
@@ -174,7 +189,14 @@ class EconomicData(BaseModel):
     gdp_growth: float | None = None
     unemployment_rate: float | None = None
     treasury_10y_yield: float | None = None
+    treasury_2y_yield: float | None = None
+    yield_curve_spread: float | None = None  # 10Y - 2Y (negative = inverted)
     vix: float | None = None
+    sp500_level: float | None = None
+    sp500_change_1d_pct: float | None = None
+    sp500_change_1m_pct: float | None = None
+    dollar_index: float | None = None
+    dollar_index_change_1m_pct: float | None = None
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
@@ -250,6 +272,24 @@ class StockDataPackage(BaseModel):
                 parts.append(f"  Analyst Target: ${f.analyst_target_price:.2f}")
             if f.analyst_recommendation:
                 parts.append(f"  Analyst Rec: {f.analyst_recommendation}")
+            if f.beta is not None:
+                parts.append(f"  Beta: {f.beta:.2f}")
+            if f.short_percent_of_float is not None:
+                parts.append(f"  Short Interest: {f.short_percent_of_float:.1%} of float")
+            if f.short_ratio is not None:
+                parts.append(f"  Short Ratio (Days to Cover): {f.short_ratio:.1f}")
+            if f.held_pct_insiders is not None:
+                parts.append(f"  Insider Ownership: {f.held_pct_insiders:.1%}")
+            if f.held_pct_institutions is not None:
+                parts.append(f"  Institutional Ownership: {f.held_pct_institutions:.1%}")
+            if f.earnings_date:
+                parts.append(f"  Next Earnings Date: {f.earnings_date}")
+            if f.insider_buys_90d or f.insider_sells_90d:
+                net = f.insider_buys_90d - f.insider_sells_90d
+                signal = "NET BUYING" if net > 0 else ("NET SELLING" if net < 0 else "NEUTRAL")
+                parts.append(f"  Insider Trades (90d): {f.insider_buys_90d} buys, {f.insider_sells_90d} sells [{signal}]")
+                for txn in f.insider_transactions[:5]:
+                    parts.append(f"    - {txn}")
             parts.append("")
 
         if self.technical:
@@ -302,8 +342,26 @@ class StockDataPackage(BaseModel):
                 parts.append(f"  Fed Funds Rate: {e.fed_funds_rate:.2f}%")
             if e.cpi_yoy is not None:
                 parts.append(f"  CPI (YoY): {e.cpi_yoy:.1f}%")
+            if e.treasury_10y_yield is not None:
+                parts.append(f"  10Y Treasury Yield: {e.treasury_10y_yield:.2f}%")
+            if e.treasury_2y_yield is not None:
+                parts.append(f"  2Y Treasury Yield: {e.treasury_2y_yield:.2f}%")
+            if e.yield_curve_spread is not None:
+                curve_status = "INVERTED (recession warning)" if e.yield_curve_spread < 0 else "NORMAL"
+                parts.append(f"  Yield Curve (10Y-2Y): {e.yield_curve_spread:+.2f}% [{curve_status}]")
             if e.vix is not None:
-                parts.append(f"  VIX: {e.vix:.1f}")
+                vix_level = "LOW (<15)" if e.vix < 15 else ("ELEVATED (15-25)" if e.vix < 25 else "HIGH (>25)")
+                parts.append(f"  VIX (Fear Gauge): {e.vix:.1f} [{vix_level}]")
+            if e.sp500_level is not None:
+                parts.append(f"  S&P 500: {e.sp500_level:,.1f}")
+                if e.sp500_change_1d_pct is not None:
+                    parts.append(f"    1D Change: {e.sp500_change_1d_pct:+.2f}%")
+                if e.sp500_change_1m_pct is not None:
+                    parts.append(f"    1M Change: {e.sp500_change_1m_pct:+.2f}%")
+            if e.dollar_index is not None:
+                parts.append(f"  Dollar Index (DXY): {e.dollar_index:.1f}")
+                if e.dollar_index_change_1m_pct is not None:
+                    parts.append(f"    1M Change: {e.dollar_index_change_1m_pct:+.2f}%")
             parts.append("")
 
         if self.collection_errors:

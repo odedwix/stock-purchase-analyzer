@@ -20,10 +20,23 @@ class FundamentalsCollector(BaseCollector):
 
     def _fetch_sync(self, symbol: str) -> dict:
         ticker = yf.Ticker(symbol)
-        return ticker.info
+        data = {"info": ticker.info}
+        # Fetch next earnings date
+        try:
+            ed = ticker.earnings_dates
+            if ed is not None and not ed.empty:
+                from datetime import datetime
+
+                future_dates = ed.index[ed.index >= datetime.now()]
+                if len(future_dates) > 0:
+                    data["next_earnings"] = future_dates[0].strftime("%Y-%m-%d")
+        except Exception:
+            pass
+        return data
 
     def _transform(self, symbol: str, raw: Any) -> FundamentalsData:
-        info = raw
+        info = raw.get("info", raw) if isinstance(raw, dict) else raw
+        next_earnings = raw.get("next_earnings") if isinstance(raw, dict) else None
         return FundamentalsData(
             symbol=symbol,
             company_name=info.get("longName", info.get("shortName", "")),
@@ -54,4 +67,12 @@ class FundamentalsCollector(BaseCollector):
             analyst_target_price=info.get("targetMeanPrice"),
             analyst_recommendation=info.get("recommendationKey"),
             num_analyst_opinions=info.get("numberOfAnalystOpinions"),
+            # Risk & ownership
+            beta=info.get("beta"),
+            short_percent_of_float=info.get("shortPercentOfFloat"),
+            short_ratio=info.get("shortRatio"),
+            shares_outstanding=info.get("sharesOutstanding"),
+            held_pct_insiders=info.get("heldPercentInsiders"),
+            held_pct_institutions=info.get("heldPercentInstitutions"),
+            earnings_date=next_earnings,
         )

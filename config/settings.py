@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     )
 
     # LLM Provider
-    llm_provider: str = Field(default="groq", description="groq, gemini, or ollama")
+    llm_provider: str = Field(default="groq", description="groq, gemini, ollama, or anthropic")
+
+    # Anthropic Claude API
+    anthropic_api_key: str = Field(default="", description="Anthropic API key")
+    anthropic_model: str = Field(
+        default="claude-haiku-4-5-20251001", description="Anthropic model for agent reasoning"
+    )
 
     # Groq (default — free tier: 30 req/min, 14,400 req/day)
     groq_api_key: str = Field(default="", description="Groq API key")
