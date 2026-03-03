@@ -32,6 +32,8 @@ def _parse_position(raw: str) -> Position:
 
 def _extract_json(text: str) -> dict:
     """Extract JSON from LLM response, handling markdown code blocks and common errors."""
+    original_text = text
+
     # Try to find JSON in code blocks
     match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     if match:
@@ -51,9 +53,7 @@ def _extract_json(text: str) -> dict:
     # Fix common LLM JSON errors:
     # 1. Trailing commas before } or ]
     cleaned = re.sub(r",\s*([}\]])", r"\1", text)
-    # 2. Single quotes instead of double quotes (simple cases)
-    # 3. Unquoted keys
-    # 4. Comments (// style)
+    # 2. Comments (// style)
     cleaned = re.sub(r"//[^\n]*", "", cleaned)
 
     try:
@@ -61,10 +61,61 @@ def _extract_json(text: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # Last resort: try to extract key-value pairs more aggressively
-    # Remove any non-JSON text before/after the object
-    cleaned = re.sub(r"[\x00-\x1f]", " ", cleaned)  # Control chars
-    return json.loads(cleaned)
+    # 3. Control characters in string values
+    cleaned = re.sub(r"[\x00-\x1f]", " ", cleaned)
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # 4. Try removing the raw_reasoning field which often has unescaped characters
+    # that break JSON parsing. We can reconstruct it from the full response.
+    stripped = re.sub(r'"raw_reasoning"\s*:\s*"[^"]*(?:"|\Z)', '"raw_reasoning": ""', cleaned)
+    # Also try with the more aggressive pattern for multi-line raw_reasoning
+    if stripped == cleaned:
+        stripped = re.sub(
+            r'"raw_reasoning"\s*:\s*"[\s\S]*?"(\s*[,}])',
+            r'"raw_reasoning": ""\1',
+            cleaned,
+        )
+
+    try:
+        result = json.loads(stripped)
+        # Restore the full response as raw_reasoning since we stripped it
+        result["raw_reasoning"] = original_text
+        return result
+    except json.JSONDecodeError:
+        pass
+
+    # 5. Last resort: try to build a partial result from regex extraction
+    result = {}
+    # Extract position
+    pos_match = re.search(r'"position"\s*:\s*"([^"]+)"', original_text)
+    if pos_match:
+        result["position"] = pos_match.group(1)
+    # Extract confidence
+    conf_match = re.search(r'"confidence"\s*:\s*(\d+)', original_text)
+    if conf_match:
+        result["confidence"] = int(conf_match.group(1))
+    # Extract key_arguments array
+    args_match = re.search(r'"key_arguments"\s*:\s*\[([\s\S]*?)\]', original_text)
+    if args_match:
+        try:
+            args_text = "[" + args_match.group(1) + "]"
+            # Fix trailing commas in the array
+            args_text = re.sub(r",\s*\]", "]", args_text)
+            result["key_arguments"] = json.loads(args_text)
+        except json.JSONDecodeError:
+            pass
+
+    if result.get("position") or result.get("confidence"):
+        result.setdefault("raw_reasoning", original_text)
+        logger.info(f"Extracted partial JSON with {len(result)} fields via regex fallback")
+        return result
+
+    # If nothing works, raise to trigger the fallback
+    return json.loads(cleaned)  # Will raise JSONDecodeError
 
 
 def _clean_price(value) -> float | None:
@@ -120,10 +171,13 @@ class BaseAgent:
         """Phase 1: Independent analysis."""
         await budget.wait_if_needed()
 
+        formatted_data = self._format_data(data)
         user_message = (
             f"Analyze {data.symbol} based on the following data and provide your "
-            f"assessment. Respond ONLY with valid JSON.\n\n{self._format_data(data)}"
+            f"assessment. Respond ONLY with valid JSON.\n\n{formatted_data}"
         )
+
+        logger.info(f"{self.name}: sending {len(user_message)} chars to LLM")
 
         response_text, input_tokens, output_tokens = await self.provider.generate(
             system_prompt=self.system_prompt,
@@ -132,18 +186,46 @@ class BaseAgent:
             temperature=0.7,
         )
         budget.record_usage(input_tokens, output_tokens)
+        logger.info(f"{self.name}: got {len(response_text)} chars back ({input_tokens} in, {output_tokens} out)")
 
         try:
             parsed = _extract_json(response_text)
+
+            # Robustly parse key_arguments — use .get() to avoid KeyError
+            key_arguments = []
+            for a in parsed.get("key_arguments", []):
+                if isinstance(a, dict):
+                    claim = a.get("claim", a.get("argument", a.get("point", "")))
+                    evidence = a.get("evidence", a.get("data", a.get("support", a.get("reasoning", ""))))
+                    strength = str(a.get("strength", "moderate")).lower()
+                    # Normalize strength to valid Literal values
+                    if strength not in ("strong", "moderate", "weak"):
+                        strength = "moderate"
+                    if claim:  # Only add if there's a claim
+                        key_arguments.append({"claim": str(claim), "evidence": str(evidence), "strength": strength})
+                elif isinstance(a, str):
+                    key_arguments.append({"claim": a, "evidence": "", "strength": "moderate"})
+
+            # Robustly parse risks — handle both strings and dicts
+            risks = parsed.get("risks_identified", parsed.get("risks", []))
+            if isinstance(risks, list):
+                risks = [str(r) if isinstance(r, str) else r.get("risk", str(r)) if isinstance(r, dict) else str(r) for r in risks]
+            else:
+                risks = []
+
+            # Clamp confidence to valid range (Pydantic requires 0-100)
+            confidence = parsed.get("confidence", 50)
+            try:
+                confidence = max(0, min(100, int(confidence)))
+            except (ValueError, TypeError):
+                confidence = 50
+
             return AgentAnalysis(
                 agent_name=self.name,
                 position=_parse_position(parsed.get("position", "WAIT")),
-                confidence=parsed.get("confidence", 50),
-                key_arguments=[
-                    {"claim": a["claim"], "evidence": a["evidence"], "strength": a.get("strength", "moderate")}
-                    for a in parsed.get("key_arguments", [])
-                ],
-                risks_identified=parsed.get("risks_identified", []),
+                confidence=confidence,
+                key_arguments=key_arguments,
+                risks_identified=risks,
                 entry_price=_clean_price(parsed.get("entry_price")),
                 exit_price=_clean_price(parsed.get("exit_price")),
                 stop_loss=_clean_price(parsed.get("stop_loss")),
@@ -151,14 +233,29 @@ class BaseAgent:
                 data_gaps=parsed.get("data_gaps", []),
                 raw_reasoning=parsed.get("raw_reasoning", response_text),
             )
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.warning(f"{self.name} returned unparseable response: {e}")
+        except Exception as e:
+            logger.warning(f"{self.name} Phase 1 parse failed: {type(e).__name__}: {e}")
+            logger.warning(f"{self.name} raw response (first 500 chars): {response_text[:500]}")
+
+            # Try to extract position and confidence from raw text
+            position = Position.WAIT
+            confidence = 40
+            text_upper = response_text.upper()
+            for pos_name in ["STRONG_BUY", "STRONG_AVOID", "BUY", "AVOID", "WAIT"]:
+                if pos_name in text_upper:
+                    position = _parse_position(pos_name)
+                    break
+            # Try to find a confidence number near the word "confidence"
+            conf_match = re.search(r'"confidence"\s*:\s*(\d+)', response_text)
+            if conf_match:
+                confidence = max(0, min(100, int(conf_match.group(1))))
+
             return AgentAnalysis(
                 agent_name=self.name,
-                position=Position.WAIT,
-                confidence=30,
+                position=position,
+                confidence=confidence,
                 raw_reasoning=response_text,
-                data_gaps=[f"Failed to parse structured response: {e}"],
+                data_gaps=[f"Partial parse — raw reasoning preserved: {type(e).__name__}: {e}"],
             )
 
     async def debate_respond(
@@ -193,6 +290,13 @@ class BaseAgent:
 
         try:
             parsed = _extract_json(response_text)
+            # Clamp confidence to valid range
+            debate_conf = parsed.get("updated_confidence", 50)
+            try:
+                debate_conf = max(0, min(100, int(debate_conf)))
+            except (ValueError, TypeError):
+                debate_conf = 50
+
             return DebateResponse(
                 agent_name=self.name,
                 rebuttals=[
@@ -206,12 +310,12 @@ class BaseAgent:
                 ],
                 concessions=_clean_string_list(parsed.get("concessions", [])),
                 updated_position=_parse_position(parsed.get("updated_position", "WAIT")),
-                updated_confidence=parsed.get("updated_confidence", 50),
+                updated_confidence=debate_conf,
                 strongest_opposing_point=parsed.get("strongest_opposing_point", ""),
                 raw_reasoning=response_text,
             )
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.warning(f"{self.name} debate response unparseable: {e}")
+        except Exception as e:
+            logger.warning(f"{self.name} debate response unparseable: {type(e).__name__}: {e}")
             # Try to preserve original position from Phase 1
             original_position = Position.WAIT
             original_confidence = 50
@@ -241,12 +345,20 @@ class BaseAgent:
             parts.append(f"\n--- {a.agent_name} ---")
             parts.append(f"Position: {a.position.value} (Confidence: {a.confidence}%)")
             for arg in a.key_arguments:
-                parts.append(f"  Argument: {arg.claim}")
-                parts.append(f"  Evidence: {arg.evidence}")
+                claim = arg.get("claim", "") if isinstance(arg, dict) else getattr(arg, "claim", str(arg))
+                evidence = arg.get("evidence", "") if isinstance(arg, dict) else getattr(arg, "evidence", "")
+                if claim:
+                    parts.append(f"  Argument: {claim}")
+                if evidence:
+                    parts.append(f"  Evidence: {evidence}")
             if a.risks_identified:
-                parts.append(f"  Risks: {', '.join(a.risks_identified)}")
+                parts.append(f"  Risks: {', '.join(str(r) for r in a.risks_identified)}")
             if a.entry_price:
                 parts.append(f"  Entry: ${a.entry_price:.2f}")
             if a.exit_price:
                 parts.append(f"  Exit: ${a.exit_price:.2f}")
+            # Include raw reasoning snippet if no key arguments (fallback display)
+            if not a.key_arguments and a.raw_reasoning:
+                reasoning_snippet = a.raw_reasoning[:500].replace("\n", " ")
+                parts.append(f"  Analysis: {reasoning_snippet}")
         return "\n".join(parts)

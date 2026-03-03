@@ -66,17 +66,34 @@ User selects stock → DataAggregator (11 parallel collectors) → StockDataPack
 
 ### Agent Debate Protocol
 - Phase 1: Each agent calls `analyze()` independently (parallel for Anthropic/Ollama, sequential with delay for Groq/Gemini)
+  - `debate_engine.py`: `_run_single_agent` logs per-agent results (position, confidence, argument count)
+  - Detailed data enrichment via `_format_data`:
+    - Stock Analyst: business overview, quarterly earnings, analyst actions, institutional holders, dividend history, insider trading, short interest, beta, competitors
+    - Sentiment Specialist: employee sentiment with recurring issues
+    - Macro Economist: business description and employee count
 - Sector: `SectorAnalystAgent.analyze()` maps world events to 12 sectors across 3 timeframes
-- Phase 2: Each agent calls `debate_respond()` seeing others' positions (1-2 rounds). Fallback preserves original Phase 1 position if JSON parsing fails.
+- Phase 2: Each agent calls `debate_respond()` seeing others' positions (1-2 rounds)
+  - `_run_single_debate` preserves Phase 1 position/confidence on failure instead of defaulting to WAIT/0
+  - Better error type logging
 - Phase 3: `ModeratorAgent.synthesize()` produces final `Recommendation` with entry/exit strategy, outlook, what-could-change, moat_assessment
 - All outputs are structured JSON; robust parsing handles $-prefixed prices, trailing commas, dict-as-string errors, old HOLD/SELL values
 - `TokenBudget` tracks usage
 
 ### JSON Parsing Helpers (in base_agent.py)
-- `_extract_json()` — handles code blocks, trailing commas, comments, control chars
+- `analyze()` — robust parsing with 5 fallback levels:
+  - Uses `.get()` with fallbacks for key_arguments (claim→argument→point, evidence→data→support→reasoning)
+  - Normalizes strength values to valid Literal ("strong"|"moderate"|"weak") before Pydantic creation
+  - Clamps confidence to 0-100 range before passing to model
+  - Catches all exceptions including Pydantic ValidationError
+  - Phase 1 fallback extracts position & confidence from raw text instead of hardcoding WAIT/30%
+  - Logs input/output char counts, token counts, first 500 chars on parse failure
+- `_extract_json()` — handles code blocks, trailing commas, comments, control chars, unescaped raw_reasoning
+  - Added regex-based partial extraction as last resort (extracts position, confidence, key_arguments individually)
+  - Better error recovery chain with 5 fallback levels
 - `_clean_price()` — handles "$160", "$171.03 (support level)", percentages
 - `_clean_string_list()` — converts dicts to strings for concessions
 - `_parse_position()` — maps old HOLD/SELL to new WAIT/AVOID via `_POSITION_MAP`
+- `_format_others_positions()` — handles both dict and Pydantic Argument objects for key_arguments; includes raw reasoning snippet when agent has no key_arguments (fallback display)
 
 ### Business Intelligence Data (in FundamentalsCollector)
 - `business_description` — company overview from yfinance (truncated to 600 chars)

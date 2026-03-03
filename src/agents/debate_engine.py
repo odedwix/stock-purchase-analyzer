@@ -137,14 +137,18 @@ class DebateEngine:
     ) -> AgentAnalysis:
         """Run a single agent with error handling."""
         try:
-            return await agent.analyze(data, budget)
+            result = await agent.analyze(data, budget)
+            logger.info(f"Agent {agent.name}: {result.position.value} ({result.confidence}%) with {len(result.key_arguments)} arguments")
+            return result
         except Exception as e:
-            logger.error(f"Agent {agent.name} failed: {e}")
+            logger.error(f"Agent {agent.name} failed completely: {type(e).__name__}: {e}")
+            from src.models.analysis import Position
             return AgentAnalysis(
                 agent_name=agent.name,
-                position="WAIT",
+                position=Position.WAIT,
                 confidence=0,
-                data_gaps=[f"Agent error: {e}"],
+                data_gaps=[f"Agent error: {type(e).__name__}: {e}"],
+                raw_reasoning=f"Agent failed with error: {e}",
             )
 
     async def _run_sector_analysis(self, data: StockDataPackage, budget: TokenBudget) -> dict:
@@ -194,11 +198,21 @@ class DebateEngine:
         try:
             return await agent.debate_respond(data, phase1_analyses, budget)
         except Exception as e:
-            logger.error(f"Agent {agent.name} debate failed: {e}")
+            logger.error(f"Agent {agent.name} debate failed: {type(e).__name__}: {e}")
+            # Preserve Phase 1 position
+            from src.models.analysis import Position
+            orig_pos = Position.WAIT
+            orig_conf = 50
+            for a in phase1_analyses:
+                if a.agent_name == agent.name:
+                    orig_pos = a.position
+                    orig_conf = a.confidence
+                    break
             return DebateResponse(
                 agent_name=agent.name,
-                updated_position="WAIT",
-                updated_confidence=0,
+                updated_position=orig_pos,
+                updated_confidence=orig_conf,
+                raw_reasoning=f"Debate failed with error: {e}",
             )
 
     def _should_debate(self, analyses: list[AgentAnalysis]) -> bool:

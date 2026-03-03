@@ -27,6 +27,10 @@ class MacroEconomistAgent(BaseAgent):
                 parts.append(f"  Revenue Growth: {f.revenue_growth:.1%}")
             if f.debt_to_equity is not None:
                 parts.append(f"  Debt/Equity: {f.debt_to_equity:.2f}")
+            if f.business_description:
+                parts.append(f"  Business: {f.business_description[:300]}")
+            if f.full_time_employees:
+                parts.append(f"  Employees: {f.full_time_employees:,}")
             parts.append("")
 
         if data.price:

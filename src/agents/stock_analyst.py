@@ -96,7 +96,68 @@ class StockAnalystAgent(BaseAgent):
                 parts.append(f"  Analyst Recommendation: {f.analyst_recommendation}")
             if f.num_analyst_opinions:
                 parts.append(f"  Number of Analysts: {f.num_analyst_opinions}")
+            if f.beta is not None:
+                parts.append(f"  Beta: {f.beta:.2f}")
+            if f.short_percent_of_float is not None:
+                parts.append(f"  Short Interest: {f.short_percent_of_float:.1%} of float")
+            if f.held_pct_insiders is not None:
+                parts.append(f"  Insider Ownership: {f.held_pct_insiders:.1%}")
+            if f.held_pct_institutions is not None:
+                parts.append(f"  Institutional Ownership: {f.held_pct_institutions:.1%}")
+            if f.earnings_date:
+                parts.append(f"  Next Earnings Date: {f.earnings_date}")
+            if f.insider_buys_90d or f.insider_sells_90d:
+                net = f.insider_buys_90d - f.insider_sells_90d
+                signal = "NET BUYING" if net > 0 else ("NET SELLING" if net < 0 else "NEUTRAL")
+                parts.append(f"  Insider Trades (90d): {f.insider_buys_90d} buys, {f.insider_sells_90d} sells [{signal}]")
             parts.append("")
+
+            # Business Overview
+            if f.business_description:
+                parts.append("BUSINESS OVERVIEW:")
+                parts.append(f"  {f.business_description}")
+                if f.full_time_employees:
+                    parts.append(f"  Employees: {f.full_time_employees:,}")
+                if f.competitor_tickers:
+                    parts.append(f"  COMPETITOR TICKERS: {', '.join(f.competitor_tickers[:5])}")
+                parts.append("")
+
+            # Quarterly Earnings History
+            if f.quarterly_earnings:
+                parts.append(f"QUARTERLY EARNINGS (last {len(f.quarterly_earnings)} quarters):")
+                for q in f.quarterly_earnings[:6]:
+                    beat_miss = "BEAT" if q.get("surprise_pct", 0) > 0 else "MISS"
+                    parts.append(
+                        f"  {q.get('quarter', '?')}: EPS ${q.get('eps_actual', 'N/A')} "
+                        f"vs est ${q.get('eps_estimate', 'N/A')} "
+                        f"[{beat_miss} by {abs(q.get('surprise_pct', 0)):.1f}%]"
+                    )
+                beats = sum(1 for q in f.quarterly_earnings if q.get("surprise_pct", 0) > 0)
+                parts.append(f"  Beat rate: {beats}/{len(f.quarterly_earnings)} quarters")
+                if f.earnings_news:
+                    parts.append("  Recent Earnings News:")
+                    for item in f.earnings_news[:3]:
+                        parts.append(f"    - {item}")
+                parts.append("")
+
+            # Analyst Actions
+            if f.analyst_actions:
+                parts.append(f"RECENT ANALYST ACTIONS ({len(f.analyst_actions)} actions):")
+                for action in f.analyst_actions[:8]:
+                    parts.append(f"  - {action}")
+                parts.append("")
+
+            # Top Institutional Holders
+            if f.top_institutional_holders:
+                parts.append("TOP INSTITUTIONAL HOLDERS:")
+                for holder in f.top_institutional_holders[:5]:
+                    parts.append(f"  - {holder}")
+                parts.append("")
+
+            # Dividend History
+            if f.dividend_history_summary:
+                parts.append(f"DIVIDEND HISTORY: {f.dividend_history_summary}")
+                parts.append("")
 
         # Stock-specific news
         if data.sentiment and data.sentiment.news_items:

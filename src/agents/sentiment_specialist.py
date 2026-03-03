@@ -111,4 +111,22 @@ class SentimentSpecialistAgent(BaseAgent):
         else:
             parts.append("SENTIMENT DATA: Not available\n")
 
+        # Employee sentiment data
+        if data.employee_sentiment:
+            emp = data.employee_sentiment
+            parts.append(f"EMPLOYEE SENTIMENT ({emp.company_name}):")
+            parts.append(f"  Overall: {emp.overall_sentiment.upper()}")
+            if emp.key_themes:
+                parts.append(f"  Key Themes: {', '.join(emp.key_themes)}")
+            if emp.recurring_issues:
+                parts.append("  RECURRING ISSUES (multi-source confirmed):")
+                for theme, info in emp.recurring_issues.items():
+                    multi = "✓ multi-source" if info.get("multi_source") else ""
+                    parts.append(f"    - {theme}: {info.get('total_mentions', 0)} mentions {multi}")
+            if emp.reddit_posts:
+                parts.append("  Top Employee Posts:")
+                for post in emp.reddit_posts[:5]:
+                    parts.append(f"    - {post}")
+            parts.append("")
+
         return "\n".join(parts)
